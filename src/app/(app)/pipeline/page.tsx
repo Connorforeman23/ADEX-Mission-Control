@@ -16,14 +16,19 @@ type LeadRecord = {
   profiles: { full_name: string } | null;
 };
 
-export default async function PipelinePage() {
+export default async function PipelinePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
   const supabase = await createClient();
-  const [{ data: leadRows }, { data: staff }] = await Promise.all([
+  const [{ data: leadRows }, { data: staff }, params] = await Promise.all([
     supabase
       .from("leads")
       .select("id, name, contact, sector, value, stage, next_action, owner_id, profiles ( full_name )")
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
+    searchParams,
   ]);
 
   const leads: LeadRow[] = ((leadRows ?? []) as unknown as LeadRecord[]).map((l) => ({
@@ -81,7 +86,7 @@ export default async function PipelinePage() {
         </div>
       </div>
 
-      <PipelineBoard leads={leads} staff={staff ?? []} />
+      <PipelineBoard leads={leads} staff={staff ?? []} openNew={params.new === "1"} />
     </div>
   );
 }

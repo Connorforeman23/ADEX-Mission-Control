@@ -1,4 +1,4 @@
-import { getCampaigns } from "@/lib/queries";
+import { getCampaigns, requireFullAccess } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 import {
   CHANNELS,
@@ -18,20 +18,63 @@ import {
 } from "@/lib/money";
 import { buildPurchaseOrders, reconcile, type SupplierInvoice } from "@/lib/po";
 import PoTable from "@/components/PoTable";
+import ClientInvoices, { type InvoiceRow, type InvoiceableCampaign } from "@/components/ClientInvoices";
 import BarList, { type BarRow } from "@/components/BarList";
 
 export const dynamic = "force-dynamic";
 
 export default async function FinancePage() {
+  await requireFullAccess();
   const supabase = await createClient();
-  const [campaigns, { data: invoiceRows }] = await Promise.all([
+  const [campaigns, { data: invoiceRows }, { data: clientInvoiceRows }] = await Promise.all([
     getCampaigns(),
     supabase
       .from("supplier_invoices")
       .select("campaign_line_id, invoice_no, invoice_date, amount, approved"),
+    supabase
+      .from("client_invoices")
+      .select("id, campaign_id, invoice_no, invoice_date, amount_ex_vat, vat, status")
+      .order("invoice_date", { ascending: false }),
   ]);
 
   const invoices = (invoiceRows ?? []) as SupplierInvoice[];
+
+  type RawClientInvoice = {
+    id: string;
+    campaign_id: string;
+    invoice_no: string | null;
+    invoice_date: string;
+    amount_ex_vat: number;
+    vat: number;
+    status: string;
+  };
+  const byId = new Map(campaigns.map((c) => [c.id, c]));
+  const clientInvoices: InvoiceRow[] = ((clientInvoiceRows ?? []) as RawClientInvoice[]).map((r) => {
+    const c = byId.get(r.campaign_id);
+    return {
+      id: r.id,
+      invoice_no: r.invoice_no,
+      invoice_date: r.invoice_date,
+      amount_ex_vat: Number(r.amount_ex_vat),
+      vat: Number(r.vat),
+      status: r.status,
+      campaignRef: c?.ref ?? "—",
+      campaignName: c?.name ?? "(deleted campaign)",
+      client: c?.clients?.name ?? "—",
+      clientPo: c?.client_po ?? null,
+    };
+  });
+  const invoicedCampaigns = new Set(clientInvoices.map((i) => i.campaignRef));
+  const invoiceable: InvoiceableCampaign[] = campaigns
+    .filter((c) => c.status !== "planning")
+    .map((c) => ({
+      id: c.id,
+      ref: c.ref,
+      name: c.name,
+      client: c.clients?.name ?? "—",
+      amount: clientGross(c),
+      invoiced: invoicedCampaigns.has(c.ref),
+    }));
   const invoiceMap = new Map(invoices.map((i) => [i.campaign_line_id, i]));
   const orders = buildPurchaseOrders(campaigns);
 
@@ -181,6 +224,8 @@ export default async function FinancePage() {
         invoices={invoices}
         today={new Date().toISOString().slice(0, 10)}
       />
+
+      <ClientInvoices invoices={clientInvoices} campaigns={invoiceable} />
     </div>
   );
 }

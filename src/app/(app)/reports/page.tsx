@@ -1,4 +1,4 @@
-import { getCampaigns } from "@/lib/queries";
+import { getCampaigns, requireFullAccess } from "@/lib/queries";
 import {
   CHANNELS,
   CHANNEL_COLOUR,
@@ -16,6 +16,7 @@ import BarList, { type BarRow } from "@/components/BarList";
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
+  await requireFullAccess();
   const campaigns = await getCampaigns();
   const withResponse = campaigns.filter((c) => Number(c.leads) > 0);
 

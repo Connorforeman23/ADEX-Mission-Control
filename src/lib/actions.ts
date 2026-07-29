@@ -28,6 +28,10 @@ export type CampaignInput = {
   region: string;
   fee: string;
   note: string;
+  clientPo: string;
+  /** Compulsory when any line is New Copy; ignored otherwise. */
+  creativeDeadline: string;
+  designSource: "inhouse" | "client";
   lines: LineInput[];
 };
 
@@ -69,6 +73,12 @@ export async function createCampaign(input: CampaignInput) {
     if (l.end_date < l.start_date) return { error: `The ${l.vendor} line ends before it starts.` };
   }
 
+  // New copy needs a creative deadline so the studio follow-up can be raised.
+  const needsCreative = lines.some((l) => l.copy_instruction === "New Copy");
+  if (needsCreative && !input.creativeDeadline) {
+    return { error: "New copy is booked — set the creative deadline so the follow-up task can be raised." };
+  }
+
   // Find or create the client.
   const { data: existing } = await supabase
     .from("clients")
@@ -103,15 +113,25 @@ export async function createCampaign(input: CampaignInput) {
       end_date: ends[ends.length - 1],
       fee: money(input.fee),
       note: input.note.trim() || null,
+      client_po: input.clientPo.trim() || null,
     })
     .select("id, ref")
     .single();
 
   if (campaignError) return { error: `Couldn't save the campaign: ${campaignError.message}` };
 
-  const { error: linesError } = await supabase.from("campaign_lines").insert(
-    lines.map((l) => ({
+  // Supplier PO numbers continue the per-client sequence (Randox → RAN0097 style).
+  const prefix = (clientName.replace(/[^A-Za-z]/g, "").slice(0, 3) || "ADX").toUpperCase();
+  const inserted: { vendor: string; po: string | null }[] = [];
+
+  for (const l of lines) {
+    let supplierPo: string | null = null;
+    const { data: poNo } = await supabase.rpc("next_po_number", { p_prefix: prefix });
+    if (typeof poNo === "string") supplierPo = poNo;
+
+    const { error } = await supabase.from("campaign_lines").insert({
       campaign_id: campaign.id,
+      supplier_po: supplierPo,
       channel: l.channel,
       vendor: l.vendor.trim(),
       detail: l.detail.trim() || null,
@@ -125,16 +145,62 @@ export async function createCampaign(input: CampaignInput) {
       urn: l.copy_instruction === "URN" ? l.urn.trim() || null : null,
       supplier_gross: money(l.supplier_gross),
       client_charge: money(l.client_charge) || money(l.supplier_gross),
-    }))
-  );
+    });
+    if (error) {
+      // Don't leave a half-saved campaign behind.
+      await supabase.from("campaigns").delete().eq("id", campaign.id);
+      return { error: `Couldn't save the ${l.vendor} line: ${error.message}` };
+    }
+    inserted.push({ vendor: l.vendor, po: supplierPo });
+  }
 
-  if (linesError) {
-    // Don't leave a campaign with no lines behind.
-    await supabase.from("campaigns").delete().eq("id", campaign.id);
-    return { error: `Couldn't save the booking lines: ${linesError.message}` };
+  // New copy → creative brief plus a follow-up task for whoever handles design:
+  // in-house goes to James Beach; client-supplied goes back to the sales owner.
+  if (needsCreative) {
+    let assignee = input.ownerId || null;
+    if (input.designSource === "inhouse") {
+      const { data: james } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("full_name", "%james beach%")
+        .maybeSingle();
+      if (james) assignee = james.id;
+    }
+
+    const { data: creative } = await supabase
+      .from("creative_items")
+      .insert({
+        client_id: clientId,
+        campaign_id: campaign.id,
+        item: `${name} — new copy`,
+        format: [...new Set(lines.filter((l) => l.copy_instruction === "New Copy").map((l) => l.channel))].join(", "),
+        due_date: input.creativeDeadline,
+        stage: "Briefed",
+        owner_id: assignee,
+        design_source: input.designSource,
+      })
+      .select("id")
+      .single();
+
+    await supabase.from("tasks").insert({
+      title:
+        input.designSource === "inhouse"
+          ? `Creative: ${name} (${campaign.ref})`
+          : `Chase client artwork: ${name} (${campaign.ref})`,
+      notes: `New copy deadline for ${clientName}. Design: ${input.designSource === "inhouse" ? "in-house studio" : "client supplied"}.`,
+      due_date: input.creativeDeadline,
+      kind: "creative",
+      assignee_id: assignee,
+      campaign_id: campaign.id,
+      client_id: clientId,
+      creative_id: creative?.id ?? null,
+      created_by: user.id,
+    });
   }
 
   revalidatePath("/campaigns");
+  revalidatePath("/tasks");
+  revalidatePath("/creative");
   revalidatePath("/");
   return { ref: campaign.ref, id: campaign.id };
 }
@@ -213,6 +279,7 @@ export async function updateCampaign(campaignId: string, input: CampaignInput) {
       end_date: ends[ends.length - 1],
       fee: money(input.fee),
       note: input.note.trim() || null,
+      client_po: input.clientPo.trim() || null,
     })
     .eq("id", campaignId);
 
@@ -288,6 +355,108 @@ export async function approveVariance(campaignLineId: string) {
   return {};
 }
 
+// --- tasks & reminders --------------------------------------------------
+
+export type TaskInput = {
+  id?: string;
+  title: string;
+  notes: string;
+  dueDate: string;
+  assigneeId: string;
+  campaignId?: string;
+  clientId?: string;
+  leadId?: string;
+};
+
+export async function saveTask(input: TaskInput) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in." };
+  if (!input.title.trim()) return { error: "Give the task a title." };
+
+  const row = {
+    title: input.title.trim(),
+    notes: input.notes.trim() || null,
+    due_date: input.dueDate || null,
+    assignee_id: input.assigneeId || null,
+    campaign_id: input.campaignId || null,
+    client_id: input.clientId || null,
+    lead_id: input.leadId || null,
+    created_by: user.id,
+  };
+
+  const { error } = input.id
+    ? await supabase.from("tasks").update(row).eq("id", input.id)
+    : await supabase.from("tasks").insert(row);
+
+  if (error) return { error: error.message };
+  revalidatePath("/tasks");
+  revalidatePath("/");
+  return {};
+}
+
+export async function toggleTask(id: string, done: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tasks").update({ done }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tasks");
+  revalidatePath("/");
+  return {};
+}
+
+export async function deleteTask(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tasks").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tasks");
+  return {};
+}
+
+// --- client invoices ----------------------------------------------------
+
+/** Raise the client invoice for a campaign at its gross ex VAT. */
+export async function generateClientInvoice(campaignId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in." };
+
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("id, ref, fee, campaign_lines ( client_charge )")
+    .eq("id", campaignId)
+    .maybeSingle();
+  if (!campaign) return { error: "Campaign not found." };
+
+  type Row = { fee: number; campaign_lines: { client_charge: number }[] };
+  const c = campaign as unknown as Row & { ref: string };
+  const amount =
+    c.campaign_lines.reduce((a, l) => a + Number(l.client_charge), 0) + Number(c.fee);
+  if (!amount) return { error: "Nothing to invoice — the campaign has no client charges." };
+
+  const { data: invoiceNo } = await supabase.rpc("next_po_number", { p_prefix: "INV" });
+
+  const { error } = await supabase.from("client_invoices").insert({
+    campaign_id: campaignId,
+    invoice_no: typeof invoiceNo === "string" ? invoiceNo : null,
+    amount_ex_vat: amount,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/finance");
+  return {};
+}
+
+export async function setInvoiceStatus(id: string, status: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("client_invoices").update({ status }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/finance");
+  return {};
+}
+
 // --- pipeline -----------------------------------------------------------
 
 export type LeadInput = {
@@ -354,6 +523,7 @@ export type CreativeInput = {
   dueDate: string;
   stage: string;
   ownerId: string;
+  designSource: "inhouse" | "client";
 };
 
 export async function saveCreativeItem(input: CreativeInput) {
@@ -368,6 +538,7 @@ export async function saveCreativeItem(input: CreativeInput) {
     due_date: input.dueDate || null,
     stage: input.stage,
     owner_id: input.ownerId || null,
+    design_source: input.designSource,
   };
 
   const { error } = input.id

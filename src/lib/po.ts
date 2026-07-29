@@ -57,7 +57,9 @@ export function buildPurchaseOrders(campaigns: Campaign[]): PurchaseOrder[] {
     const vat = Math.round(net * VAT_RATE);
 
     return {
-      po: code + String(n).padStart(4, "0"),
+      // The number stored at booking time wins; the derived one covers
+      // campaigns booked before numbering existed.
+      po: l.supplier_po ?? code + String(n).padStart(4, "0"),
       lineId: l.id,
       campaignId: c.id,
       campaignRef: c.ref,

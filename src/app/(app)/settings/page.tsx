@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireFullAccess } from "@/lib/queries";
 import { COMMISSION_RATE, MARGIN_FLOOR, VAT_RATE, initials } from "@/lib/money";
 import { INVOICE_TOLERANCE } from "@/lib/po";
 import { SUPPLIERS_BY_CHANNEL } from "@/lib/reference";
@@ -15,6 +16,7 @@ const COMMISSION_ROWS = [
 ];
 
 export default async function SettingsPage() {
+  await requireFullAccess();
   const supabase = await createClient();
   const { data: team } = await supabase
     .from("profiles")

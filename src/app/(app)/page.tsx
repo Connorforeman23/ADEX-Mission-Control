@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { getCampaigns, getOpenLeads, getPoVariances } from "@/lib/queries";
+import { getCampaigns, getOpenLeads, getPoVariances, getTasks } from "@/lib/queries";
+import QuickNew from "@/components/QuickNew";
 import {
   CHANNELS,
   CHANNEL_COLOUR,
@@ -18,11 +18,14 @@ import BarList, { type BarRow } from "@/components/BarList";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [campaigns, leads, variances] = await Promise.all([
+  const [campaigns, leads, variances, tasks] = await Promise.all([
     getCampaigns(),
     getOpenLeads(),
     getPoVariances(),
+    getTasks(),
   ]);
+  const today = new Date().toISOString().slice(0, 10);
+  const dueTasks = tasks.filter((t) => !t.done && t.due_date && t.due_date <= today).slice(0, 5);
 
   const liveCampaigns = campaigns.filter((c) => c.status === "live" || c.status === "risk");
   const openBook = campaigns.filter((c) => c.status !== "done");
@@ -79,9 +82,7 @@ export default async function DashboardPage() {
               : "Nothing booked yet — add your first campaign to bring this to life."}
           </p>
         </div>
-        <Link href="/campaigns" className="btn btn-primary">
-          New campaign
-        </Link>
+        <QuickNew />
       </div>
 
       <div className="kpis">
@@ -176,10 +177,28 @@ export default async function DashboardPage() {
         <section className="card">
           <div className="card-head">
             <h2>Needs attention</h2>
-            <span className="sub">{variances.length + lowMargin.length} open</span>
+            <span className="sub">{variances.length + lowMargin.length + dueTasks.length} open</span>
           </div>
           <div className="card-body">
-            {variances.length === 0 && lowMargin.length === 0 ? (
+            {dueTasks.length > 0 && (
+              <div className="rows" style={{ marginBottom: variances.length + lowMargin.length ? 8 : 0 }}>
+                {dueTasks.map((t) => (
+                  <div className="row" key={t.id}>
+                    <span className="flag warn">✓</span>
+                    <div className="grow">
+                      <p>{t.title}</p>
+                      <small>
+                        {t.about || "Task"} · {t.assignee}
+                      </small>
+                    </div>
+                    <span className="num" style={{ color: "var(--warn)", whiteSpace: "nowrap" }}>
+                      due
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {variances.length === 0 && lowMargin.length === 0 && dueTasks.length === 0 ? (
               <p className="empty-note">Nothing flagged. Margin floor is {MARGIN_FLOOR}%.</p>
             ) : (
               <div className="rows">

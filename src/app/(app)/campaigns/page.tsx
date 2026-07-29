@@ -4,12 +4,17 @@ import CampaignTable from "@/components/CampaignTable";
 
 export const dynamic = "force-dynamic";
 
-export default async function CampaignsPage() {
+export default async function CampaignsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
   const supabase = await createClient();
-  const [campaigns, { data: clients }, { data: staff }] = await Promise.all([
+  const [campaigns, { data: clients }, { data: staff }, params] = await Promise.all([
     getCampaigns(),
     supabase.from("clients").select("id, name").order("name"),
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
+    searchParams,
   ]);
 
   return (
@@ -25,7 +30,12 @@ export default async function CampaignsPage() {
         </div>
       </div>
 
-      <CampaignTable campaigns={campaigns} clients={clients ?? []} staffList={staff ?? []} />
+      <CampaignTable
+        campaigns={campaigns}
+        clients={clients ?? []}
+        staffList={staff ?? []}
+        openNew={params.new === "1"}
+      />
     </div>
   );
 }

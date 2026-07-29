@@ -23,6 +23,7 @@ import {
 } from "@/lib/money";
 import { CAMPAIGN_STATUSES } from "@/lib/reference";
 import Drawer from "@/components/Drawer";
+import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
 import BookingForm, { type EditingCampaign } from "@/components/BookingForm";
 
@@ -37,17 +38,19 @@ export default function CampaignTable({
   campaigns,
   clients,
   staffList,
+  openNew,
 }: {
   campaigns: Campaign[];
   clients: { id: string; name: string }[];
   staffList: { id: string; full_name: string }[];
+  openNew?: boolean;
 }) {
   const [staff, setStaff] = useState("All");
   const [client, setClient] = useState("All");
   const [status, setStatus] = useState("All");
   const [channel, setChannel] = useState("All");
   const [view, setView] = useState<"list" | "board">("list");
-  const [editor, setEditor] = useState<{ open: boolean; editing?: EditingCampaign }>({ open: false });
+  const [editor, setEditor] = useState<{ open: boolean; editing?: EditingCampaign }>({ open: !!openNew });
   const [detail, setDetail] = useState<Campaign | null>(null);
 
   const staffIdByName = useMemo(
@@ -82,6 +85,7 @@ export default function CampaignTable({
       region: c.region,
       fee: String(c.fee ?? 0),
       note: "",
+      clientPo: c.client_po ?? "",
       lines: c.campaign_lines.map((l) => ({
         id: l.id,
         channel: l.channel,
@@ -349,7 +353,17 @@ export default function CampaignTable({
         title={detail?.name ?? ""}
         onClose={() => setDetail(null)}
       >
-        {detail && <CampaignDetail c={detail} onEdit={() => { const d = detail; setDetail(null); openEdit(d); }} />}
+        {detail && (
+          <CampaignDetail
+            c={detail}
+            staff={staffList}
+            onEdit={() => {
+              const d = detail;
+              setDetail(null);
+              openEdit(d);
+            }}
+          />
+        )}
       </Drawer>
 
       {/* Book / edit */}
@@ -370,7 +384,15 @@ export default function CampaignTable({
   );
 }
 
-function CampaignDetail({ c, onEdit }: { c: Campaign; onEdit: () => void }) {
+function CampaignDetail({
+  c,
+  staff,
+  onEdit,
+}: {
+  c: Campaign;
+  staff: { id: string; full_name: string }[];
+  onEdit: () => void;
+}) {
   const gross = clientGross(c);
   const net = supplierNet(c);
   const margin = dealMargin(c);
@@ -455,6 +477,8 @@ function CampaignDetail({ c, onEdit }: { c: Campaign; onEdit: () => void }) {
         <dd>{c.region}</dd>
         <dt>Sales owner</dt>
         <dd>{c.profiles?.full_name ?? "—"}</dd>
+        <dt>Client PO</dt>
+        <dd className="num">{c.client_po ?? "—"}</dd>
         <dt>Leads to date</dt>
         <dd className="num">{Number(c.leads) || "—"}</dd>
         <dt>Cost per lead</dt>
@@ -500,6 +524,7 @@ function CampaignDetail({ c, onEdit }: { c: Campaign; onEdit: () => void }) {
                     <div className="sub-line">
                       {l.copy_instruction ?? "New Copy"}
                       {l.urn ? ` · ${l.urn}` : ""}
+                      {l.supplier_po ? ` · PO ${l.supplier_po}` : ""}
                     </div>
                   </td>
                   <td className="num" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
@@ -530,10 +555,15 @@ function CampaignDetail({ c, onEdit }: { c: Campaign; onEdit: () => void }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
         <button className="btn btn-primary" onClick={onEdit}>
           Edit campaign
         </button>
+        <FollowUp
+          campaignId={c.id}
+          defaultTitle={`Follow up: ${c.name} (${c.ref})`}
+          staff={staff}
+        />
       </div>
 
       <style jsx>{`

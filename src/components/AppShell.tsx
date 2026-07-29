@@ -15,6 +15,7 @@ const NAV = [
       { href: "/campaigns", label: "Campaigns", icon: "M3 5h18v14H3zM3 10h18M9 10v9" },
       { href: "/media-plan", label: "Media plan", icon: "M3 4h18v17H3zM3 9h18M8 2v4M16 2v4" },
       { href: "/creative", label: "Creative", icon: "M12 3 4 8v8l8 5 8-5V8zM12 12v9M4 8l8 4 8-4" },
+      { href: "/tasks", label: "Tasks", icon: "M9 11l3 3 8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" },
     ],
   },
   {
@@ -26,6 +27,7 @@ const NAV = [
   },
   {
     group: "Measure",
+    restricted: false, // hidden entirely for restricted users
     items: [
       { href: "/finance", label: "Finance", icon: "M4 19V9M10 19V5M16 19v-7M22 19H2" },
       { href: "/reports", label: "Reports", icon: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8ZM14 3v5h5M9 13h6M9 17h4" },
@@ -84,7 +86,7 @@ export default function AppShell({
         </div>
 
         <nav className="nav">
-          {NAV.map((group) => (
+          {NAV.filter((g) => role !== "restricted" || g.restricted !== false).map((group) => (
             <div key={group.group}>
               <div className="eyebrow nav-group">{group.group}</div>
               {group.items.map((item) => {
@@ -112,7 +114,7 @@ export default function AppShell({
             <span className="avatar">{initials(fullName)}</span>
             <div style={{ minWidth: 0 }}>
               <p>{fullName}</p>
-              <small>{role === "admin" ? "Admin" : "Standard"}</small>
+              <small>{role === "admin" ? "Admin" : role === "restricted" ? "Own accounts" : "Standard"}</small>
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>

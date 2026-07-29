@@ -12,21 +12,27 @@ type CreativeRecord = {
   stage: string;
   client_id: string | null;
   owner_id: string | null;
+  design_source: string | null;
   clients: { name: string } | null;
   profiles: { full_name: string } | null;
 };
 
-export default async function CreativePage() {
+export default async function CreativePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
   const supabase = await createClient();
-  const [{ data: rows }, { data: clients }, { data: staff }] = await Promise.all([
+  const [{ data: rows }, { data: clients }, { data: staff }, params] = await Promise.all([
     supabase
       .from("creative_items")
       .select(
-        "id, item, format, spec, due_date, stage, client_id, owner_id, clients ( name ), profiles ( full_name )"
+        "id, item, format, spec, due_date, stage, client_id, owner_id, design_source, clients ( name ), profiles ( full_name )"
       )
       .order("due_date", { nullsFirst: false }),
     supabase.from("clients").select("id, name").order("name"),
     supabase.from("profiles").select("id, full_name").order("full_name"),
+    searchParams,
   ]);
 
   const items: CreativeRow[] = ((rows ?? []) as unknown as CreativeRecord[]).map((r) => ({
@@ -40,6 +46,7 @@ export default async function CreativePage() {
     stage: r.stage,
     owner: r.profiles?.full_name ?? "—",
     ownerId: r.owner_id ?? "",
+    designSource: (r.design_source === "client" ? "client" : "inhouse") as "inhouse" | "client",
   }));
 
   const today = new Date().toISOString().slice(0, 10);
@@ -85,7 +92,13 @@ export default async function CreativePage() {
         </div>
       </div>
 
-      <CreativeBoard items={items} clients={clients ?? []} staff={staff ?? []} today={today} />
+      <CreativeBoard
+        items={items}
+        clients={clients ?? []}
+        staff={staff ?? []}
+        today={today}
+        openNew={params.new === "1"}
+      />
     </div>
   );
 }

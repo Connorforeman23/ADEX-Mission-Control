@@ -10,6 +10,7 @@ import {
   saveCreativeItem,
   type CreativeInput,
 } from "@/lib/actions";
+import { CREATIVE_FORMATS } from "@/lib/reference";
 
 export const STAGES = ["Briefed", "In design", "Client approval", "Amends", "Approved"];
 
@@ -32,6 +33,7 @@ export type CreativeRow = {
   stage: string;
   owner: string;
   ownerId: string;
+  designSource: "inhouse" | "client";
 };
 
 const blank = (ownerId: string): CreativeInput => ({
@@ -42,6 +44,7 @@ const blank = (ownerId: string): CreativeInput => ({
   dueDate: "",
   stage: "Briefed",
   ownerId,
+  designSource: "inhouse",
 });
 
 export default function CreativeBoard({
@@ -49,15 +52,19 @@ export default function CreativeBoard({
   clients,
   staff,
   today,
+  openNew,
 }: {
   items: CreativeRow[];
   clients: { id: string; name: string }[];
   staff: { id: string; full_name: string }[];
   /** Passed from the server so overdue flagging renders identically on both. */
   today: string;
+  openNew?: boolean;
 }) {
   const router = useRouter();
-  const [editing, setEditing] = useState<CreativeInput | null>(null);
+  const [editing, setEditing] = useState<CreativeInput | null>(
+    openNew ? blank(staff[0]?.id ?? "") : null
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -133,6 +140,7 @@ export default function CreativeBoard({
                           dueDate: i.due_date ?? "",
                           stage: i.stage,
                           ownerId: i.ownerId,
+                          designSource: i.designSource,
                         });
                       }}
                     >
@@ -197,12 +205,32 @@ export default function CreativeBoard({
               </label>
               <label className="field">
                 <span>Format</span>
-                <input
+                <select
                   className="input"
                   value={editing.format}
                   onChange={(e) => setEditing({ ...editing, format: e.target.value })}
-                  placeholder="Audio, Video, Press, OOH…"
-                />
+                >
+                  <option value="">Choose format…</option>
+                  {CREATIVE_FORMATS.map((f) => (
+                    <option key={f}>{f}</option>
+                  ))}
+                  {editing.format && !CREATIVE_FORMATS.includes(editing.format) && (
+                    <option>{editing.format}</option>
+                  )}
+                </select>
+              </label>
+              <label className="field">
+                <span>Design</span>
+                <select
+                  className="input"
+                  value={editing.designSource}
+                  onChange={(e) =>
+                    setEditing({ ...editing, designSource: e.target.value as "inhouse" | "client" })
+                  }
+                >
+                  <option value="inhouse">In-house (James Beach)</option>
+                  <option value="client">Client supplied</option>
+                </select>
               </label>
               <label className="field">
                 <span>Specification</span>

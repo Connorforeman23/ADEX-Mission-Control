@@ -16,12 +16,13 @@ type ClientRecord = {
 
 export default async function ClientsPage() {
   const supabase = await createClient();
-  const [campaigns, { data: clients }] = await Promise.all([
+  const [campaigns, { data: clients }, { data: staff }] = await Promise.all([
     getCampaigns(),
     supabase
       .from("clients")
       .select("id, name, sector, status, retainer, profiles ( full_name )")
       .order("name"),
+    supabase.from("profiles").select("id, full_name").order("full_name"),
   ]);
 
   const rows: ClientRow[] = ((clients ?? []) as unknown as ClientRecord[]).map((cl) => {
@@ -87,7 +88,7 @@ export default async function ClientsPage() {
         </div>
       </div>
 
-      <ClientTable rows={rows} />
+      <ClientTable rows={rows} staff={staff ?? []} />
     </div>
   );
 }

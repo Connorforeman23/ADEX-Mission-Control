@@ -47,6 +47,7 @@ export type EditingCampaign = {
   region: string;
   fee: string;
   note: string;
+  clientPo: string;
   lines: LineInput[];
 };
 
@@ -70,6 +71,9 @@ export default function BookingForm({
   const [region, setRegion] = useState(editing?.region ?? "Meridian");
   const [fee, setFee] = useState(editing?.fee ?? "0");
   const [note, setNote] = useState(editing?.note ?? "");
+  const [clientPo, setClientPo] = useState(editing?.clientPo ?? "");
+  const [creativeDeadline, setCreativeDeadline] = useState("");
+  const [designSource, setDesignSource] = useState<"inhouse" | "client">("inhouse");
   const [lines, setLines] = useState<LineInput[]>(editing?.lines?.length ? editing.lines : [blankLine()]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -116,6 +120,9 @@ export default function BookingForm({
       region,
       fee,
       note,
+      clientPo,
+      creativeDeadline,
+      designSource,
       lines,
     };
     const result = editing
@@ -186,6 +193,15 @@ export default function BookingForm({
                 <option key={r}>{r}</option>
               ))}
             </select>
+          </label>
+          <label className="field">
+            <span>Client PO number (optional)</span>
+            <input
+              className="input num"
+              value={clientPo}
+              onChange={(e) => setClientPo(e.target.value)}
+              placeholder="Their PO, if they issue one"
+            />
           </label>
           <label className="field wide">
             <span>Notes</span>
@@ -317,10 +333,47 @@ export default function BookingForm({
         </div>
       </section>
 
-      {/* 3 — fees */}
+      {/* 3 — creative, only when new copy is being made */}
+      {lines.some((l) => l.copy_instruction === "New Copy") && !editing && (
+        <section className="card" style={{ borderColor: "var(--pink)" }}>
+          <div className="card-head">
+            <h2>3 · Creative — new copy booked</h2>
+            <span className="sub">Raises a follow-up task automatically</span>
+          </div>
+          <div className="card-body form-grid">
+            <label className="field">
+              <span>Creative deadline (required)</span>
+              <input
+                className="input num"
+                type="date"
+                required
+                value={creativeDeadline}
+                onChange={(e) => setCreativeDeadline(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Design</span>
+              <select
+                className="input"
+                value={designSource}
+                onChange={(e) => setDesignSource(e.target.value as "inhouse" | "client")}
+              >
+                <option value="inhouse">In-house (task goes to James Beach)</option>
+                <option value="client">Client supplied (task goes to the sales owner)</option>
+              </select>
+            </label>
+            <p className="sub-line wide" style={{ margin: 0 }}>
+              A creative brief is added to the studio board and a task is raised for the deadline.
+              Repeat copy needs neither, so this section only appears for new copy.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* 4 — fees */}
       <section className="card">
         <div className="card-head">
-          <h2>3 · Fees</h2>
+          <h2>{lines.some((l) => l.copy_instruction === "New Copy") && !editing ? "4" : "3"} · Fees</h2>
         </div>
         <div className="card-body">
           <label className="field" style={{ maxWidth: 220 }}>
@@ -330,11 +383,11 @@ export default function BookingForm({
         </div>
       </section>
 
-      {/* 4 — commercials */}
+      {/* commercials */}
       <section className="card">
         <div className="card-head">
-          <h2>4 · Commercials</h2>
-          <span className="sub">Updates as you type</span>
+          <h2>{lines.some((l) => l.copy_instruction === "New Copy") && !editing ? "5" : "4"} · Commercials</h2>
+          <span className="sub">Updates as you type · supplier PO numbers assigned on save</span>
         </div>
         <div className="card-body">
           <div className="totals">

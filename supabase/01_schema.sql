@@ -10,7 +10,7 @@ create extension if not exists "pgcrypto";
 create table if not exists staff_roles (
   email text primary key,
   full_name text not null,
-  role text not null check (role in ('admin', 'standard')),
+  role text not null check (role in ('admin', 'standard', 'restricted')),
   is_sales boolean not null default false
 );
 
@@ -18,7 +18,7 @@ create table if not exists profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   email text not null,
   full_name text not null,
-  role text not null default 'standard' check (role in ('admin', 'standard')),
+  role text not null default 'standard' check (role in ('admin', 'standard', 'restricted')),
   is_sales boolean not null default false,
   created_at timestamptz not null default now()
 );

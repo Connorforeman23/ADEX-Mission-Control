@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
+import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
 import { gbp, gbpK } from "@/lib/money";
 import { deleteLead, moveLeadStage, saveLead, type LeadInput } from "@/lib/actions";
@@ -51,14 +52,16 @@ const blank = (ownerId: string): LeadInput => ({
 export default function PipelineBoard({
   leads,
   staff,
+  openNew,
 }: {
   leads: LeadRow[];
   staff: { id: string; full_name: string }[];
+  openNew?: boolean;
 }) {
   const router = useRouter();
   const [owner, setOwner] = useState("All");
   const [view, setView] = useState<"board" | "list" | "forecast">("board");
-  const [editing, setEditing] = useState<LeadInput | null>(null);
+  const [editing, setEditing] = useState<LeadInput | null>(openNew ? blank(staff[0]?.id ?? "") : null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -363,6 +366,15 @@ export default function PipelineBoard({
                 />
               </label>
             </div>
+
+            {editing.id && (
+              <FollowUp
+                leadId={editing.id}
+                defaultTitle={`Follow up: ${editing.name}`}
+                staff={staff}
+                defaultAssigneeId={editing.ownerId}
+              />
+            )}
 
             {editing.stage === "Closed Won" && (
               <p className="sub-line" style={{ margin: 0 }}>

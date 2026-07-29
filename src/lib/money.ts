@@ -30,6 +30,7 @@ export type CampaignLine = {
   ooh_disp_type?: string | null;
   copy_instruction?: string;
   urn?: string | null;
+  supplier_po?: string | null;
 };
 
 export type Campaign = {
@@ -44,6 +45,7 @@ export type Campaign = {
   billed: number;
   leads: number;
   cpl: number;
+  client_po?: string | null;
   clients: { name: string } | null;
   profiles: { full_name: string } | null;
   campaign_lines: CampaignLine[];

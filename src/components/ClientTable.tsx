@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
 import { gbp, MARGIN_FLOOR } from "@/lib/money";
 
@@ -18,7 +19,13 @@ export type ClientRow = {
   channels: string[];
 };
 
-export default function ClientTable({ rows }: { rows: ClientRow[] }) {
+export default function ClientTable({
+  rows,
+  staff,
+}: {
+  rows: ClientRow[];
+  staff: { id: string; full_name: string }[];
+}) {
   const [owner, setOwner] = useState("All");
   const [name, setName] = useState("All");
   const [view, setView] = useState<"cards" | "table">("cards");
@@ -132,6 +139,9 @@ export default function ClientTable({ rows }: { rows: ClientRow[] }) {
                   <small className="sub-line">
                     {r.campaigns} campaign{r.campaigns === 1 ? "" : "s"}
                   </small>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <FollowUp clientId={r.id} defaultTitle={`Follow up: ${r.name}`} staff={staff} />
                 </div>
               </article>
             );

@@ -27,6 +27,17 @@ export const OOH_FORMATS = ["4 Sheet", "6 Sheet", "12 Sheet", "48 Sheet", "96 Sh
 
 export const COPY_OPTIONS = ["New Copy", "Repeat Copy", "URN"];
 
+/** Formats the studio produces, offered on creative briefs. */
+export const CREATIVE_FORMATS = [
+  "TV / Video",
+  "Radio / Audio",
+  "Press / Print",
+  "OOH artwork",
+  "Digital display",
+  "Social assets",
+  "Concept / Brand",
+];
+
 /** CPT only applies to these channels. */
 export const CPT_CHANNELS = ["Digital", "TV", "Radio"];
 
