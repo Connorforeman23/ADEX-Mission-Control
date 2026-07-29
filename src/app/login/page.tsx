@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -20,6 +20,16 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(searchParams.get("error"));
   const [loading, setLoading] = useState(false);
+
+  // An invite/recovery link carries its tokens in the URL fragment, which
+  // survives the redirect here. Forward it to /set-password rather than
+  // stranding someone whose link pointed at the wrong port or path.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes("access_token") || hash.includes("error_description")) {
+      router.replace(`/set-password${hash}`);
+    }
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
