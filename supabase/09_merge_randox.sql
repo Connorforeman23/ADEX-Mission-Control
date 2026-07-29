@@ -1,8 +1,8 @@
 -- Merge every "Randox…" client record (Randox, Randox Health, any casing)
--- into a single client named Randox. Campaigns, booking lines, creative,
--- tasks and invoices all follow their campaign's client, so repointing the
--- campaigns merges the media plan and finance views automatically.
--- Safe to run more than once.
+-- into a single client, displayed as "Randox Health". Campaigns, booking
+-- lines, creative, tasks and invoices all follow their campaign's client,
+-- so repointing the campaigns merges the media plan and finance views
+-- automatically. Safe to run more than once.
 
 do $$
 declare
@@ -22,8 +22,11 @@ begin
     update creative_items set client_id = keep where client_id = dup.id;
     update tasks          set client_id = keep where client_id = dup.id;
     delete from clients where id = dup.id;
-    raise notice 'merged % into Randox', dup.name;
+    raise notice 'merged % into the surviving Randox record', dup.name;
   end loop;
+
+  -- Display name across the whole app.
+  update clients set name = 'Randox Health' where id = keep;
 end $$;
 
 select c.name,
