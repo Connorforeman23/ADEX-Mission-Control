@@ -192,10 +192,10 @@ export default function AppShell({
           grid-template-columns: 64px minmax(0, 1fr);
         }
         .shell.rail-hidden {
-          grid-template-columns: 0 minmax(0, 1fr);
+          grid-template-columns: minmax(0, 1fr);
         }
         .shell.rail-hidden .rail {
-          transform: translateX(-102%);
+          display: none;
         }
         .rail-controls {
           margin-left: auto;
