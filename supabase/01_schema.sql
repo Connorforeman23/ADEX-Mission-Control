@@ -34,7 +34,7 @@ as $$
 declare
   match staff_roles%rowtype;
 begin
-  select * into match from staff_roles where email = new.email;
+  select * into match from staff_roles where lower(email) = lower(new.email);
   insert into profiles (id, email, full_name, role, is_sales)
   values (
     new.id,

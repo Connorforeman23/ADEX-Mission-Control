@@ -34,14 +34,21 @@ export default async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isAuthPage = path.startsWith("/login");
+  // /set-password receives its session in the URL fragment, which never reaches
+  // the server — so it must stay reachable while signed out or the invite dies here.
+  const isAuthPage =
+    path.startsWith("/login") ||
+    path.startsWith("/set-password") ||
+    path.startsWith("/auth/");
 
   if (!user && !isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-  if (user && isAuthPage) {
+  // Signed-in users get bounced off /login, but not off /set-password —
+  // accepting an invite signs you in first, then you choose a password.
+  if (user && path.startsWith("/login")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
