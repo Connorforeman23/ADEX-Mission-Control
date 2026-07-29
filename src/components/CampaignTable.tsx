@@ -15,12 +15,60 @@ import {
   type Campaign,
 } from "@/lib/money";
 import { CAMPAIGN_STATUSES } from "@/lib/reference";
+import Drawer from "@/components/Drawer";
+import BookingForm, { type EditingCampaign } from "@/components/BookingForm";
 
-export default function CampaignTable({ campaigns }: { campaigns: Campaign[] }) {
+export default function CampaignTable({
+  campaigns,
+  clients,
+  staffList,
+}: {
+  campaigns: Campaign[];
+  clients: { id: string; name: string }[];
+  staffList: { id: string; full_name: string }[];
+}) {
   const [staff, setStaff] = useState("All");
   const [client, setClient] = useState("All");
   const [status, setStatus] = useState("All");
   const [channel, setChannel] = useState("All");
+  const [drawer, setDrawer] = useState<{ open: boolean; editing?: EditingCampaign }>({ open: false });
+
+  const staffIdByName = useMemo(
+    () => new Map(staffList.map((s) => [s.full_name, s.id])),
+    [staffList]
+  );
+
+  function openEdit(c: Campaign) {
+    setDrawer({
+      open: true,
+      editing: {
+        id: c.id,
+        name: c.name,
+        clientName: c.clients?.name ?? "",
+        ownerId: staffIdByName.get(c.profiles?.full_name ?? "") ?? "",
+        status: c.status,
+        region: c.region,
+        fee: String(c.fee ?? 0),
+        note: "",
+        lines: c.campaign_lines.map((l) => ({
+          id: l.id,
+          channel: l.channel,
+          vendor: l.vendor,
+          detail: l.detail ?? "",
+          start_date: l.start_date,
+          end_date: l.end_date,
+          selected_dates: l.selected_dates ?? "",
+          cpt: l.cpt != null ? String(l.cpt) : "",
+          ooh_format: l.ooh_format ?? "6 Sheet",
+          ooh_disp_type: l.ooh_disp_type ?? "Static",
+          copy_instruction: l.copy_instruction ?? "New Copy",
+          urn: l.urn ?? "",
+          supplier_gross: String(l.supplier_gross ?? ""),
+          client_charge: String(l.client_charge ?? ""),
+        })),
+      },
+    });
+  }
 
   const staffOptions = useMemo(
     () => [...new Set(campaigns.map((c) => c.profiles?.full_name).filter(Boolean))].sort() as string[],
@@ -92,6 +140,13 @@ export default function CampaignTable({ campaigns }: { campaigns: Campaign[] }) 
         <button className="btn" onClick={clearAll}>
           Clear
         </button>
+        <button
+          className="btn btn-primary"
+          style={{ marginLeft: "auto" }}
+          onClick={() => setDrawer({ open: true })}
+        >
+          New campaign
+        </button>
       </div>
 
       <section className="card">
@@ -116,6 +171,7 @@ export default function CampaignTable({ campaigns }: { campaigns: Campaign[] }) 
                     <th className="r">Profit</th>
                     <th>Owner</th>
                     <th>Status</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -155,6 +211,18 @@ export default function CampaignTable({ campaigns }: { campaigns: Campaign[] }) 
                         <td>
                           <span className={`st ${c.status}`}>{STATUS_LABEL[c.status] ?? c.status}</span>
                         </td>
+                        <td>
+                          <button
+                            className="row-edit"
+                            title={`Edit ${c.name}`}
+                            aria-label={`Edit ${c.name}`}
+                            onClick={() => openEdit(c)}
+                          >
+                            <svg viewBox="0 0 24 24">
+                              <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                            </svg>
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -171,6 +239,20 @@ export default function CampaignTable({ campaigns }: { campaigns: Campaign[] }) 
           (gross less 15%).
         </p>
       )}
+
+      <Drawer
+        open={drawer.open}
+        eyebrow={drawer.editing ? "Edit campaign" : "New campaign"}
+        title={drawer.editing ? drawer.editing.name : "Book a campaign"}
+        onClose={() => setDrawer({ open: false })}
+      >
+        <BookingForm
+          clients={clients}
+          staff={staffList}
+          editing={drawer.editing}
+          onDone={() => setDrawer({ open: false })}
+        />
+      </Drawer>
     </>
   );
 }

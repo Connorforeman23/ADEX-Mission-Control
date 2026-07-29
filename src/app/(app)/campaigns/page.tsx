@@ -1,11 +1,16 @@
-import Link from "next/link";
 import { getCampaigns } from "@/lib/queries";
+import { createClient } from "@/lib/supabase/server";
 import CampaignTable from "@/components/CampaignTable";
 
 export const dynamic = "force-dynamic";
 
 export default async function CampaignsPage() {
-  const campaigns = await getCampaigns();
+  const supabase = await createClient();
+  const [campaigns, { data: clients }, { data: staff }] = await Promise.all([
+    getCampaigns(),
+    supabase.from("clients").select("id, name").order("name"),
+    supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
+  ]);
 
   return (
     <div className="page">
@@ -13,14 +18,14 @@ export default async function CampaignsPage() {
         <div>
           <div className="eyebrow">Delivery</div>
           <h1>Campaigns</h1>
-          <p>Every brief from planning through to reconciliation. Click a row for the full breakdown.</p>
+          <p>
+            Every brief from planning through to reconciliation. Book or edit in the side panel; click a
+            row for the full breakdown.
+          </p>
         </div>
-        <Link href="/campaigns/new" className="btn btn-primary">
-          New campaign
-        </Link>
       </div>
 
-      <CampaignTable campaigns={campaigns} />
+      <CampaignTable campaigns={campaigns} clients={clients ?? []} staffList={staff ?? []} />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createCampaign, type LineInput } from "@/lib/actions";
+import { createCampaign, updateCampaign, type LineInput } from "@/lib/actions";
 import {
   CAMPAIGN_STATUSES,
   COPY_OPTIONS,
@@ -38,23 +38,39 @@ const num = (v: string) => {
 const netOf = (l: LineInput) =>
   l.channel === "Creative" ? num(l.supplier_gross) : Math.round(num(l.supplier_gross) * 0.85);
 
+export type EditingCampaign = {
+  id: string;
+  name: string;
+  clientName: string;
+  ownerId: string;
+  status: string;
+  region: string;
+  fee: string;
+  note: string;
+  lines: LineInput[];
+};
+
 export default function BookingForm({
   clients,
   staff,
+  editing,
+  onDone,
 }: {
   clients: { id: string; name: string }[];
   staff: { id: string; full_name: string }[];
+  editing?: EditingCampaign;
+  onDone?: () => void;
 }) {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [clientName, setClientName] = useState("");
+  const [name, setName] = useState(editing?.name ?? "");
+  const [clientName, setClientName] = useState(editing?.clientName ?? "");
   const [newClient, setNewClient] = useState("");
-  const [ownerId, setOwnerId] = useState(staff[0]?.id ?? "");
-  const [status, setStatus] = useState("planning");
-  const [region, setRegion] = useState("Meridian");
-  const [fee, setFee] = useState("0");
-  const [note, setNote] = useState("");
-  const [lines, setLines] = useState<LineInput[]>([blankLine()]);
+  const [ownerId, setOwnerId] = useState(editing?.ownerId || staff[0]?.id || "");
+  const [status, setStatus] = useState(editing?.status ?? "planning");
+  const [region, setRegion] = useState(editing?.region ?? "Meridian");
+  const [fee, setFee] = useState(editing?.fee ?? "0");
+  const [note, setNote] = useState(editing?.note ?? "");
+  const [lines, setLines] = useState<LineInput[]>(editing?.lines?.length ? editing.lines : [blankLine()]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -92,7 +108,7 @@ export default function BookingForm({
     e.preventDefault();
     setError(null);
     setSaving(true);
-    const result = await createCampaign({
+    const payload = {
       name,
       clientName: clientName === "__new" ? newClient : clientName,
       ownerId,
@@ -101,13 +117,17 @@ export default function BookingForm({
       fee,
       note,
       lines,
-    });
+    };
+    const result = editing
+      ? await updateCampaign(editing.id, payload)
+      : await createCampaign(payload);
     setSaving(false);
     if (result.error) {
       setError(result.error);
       return;
     }
-    router.push("/campaigns");
+    if (onDone) onDone();
+    else router.push("/campaigns");
     router.refresh();
   }
 
@@ -366,9 +386,13 @@ export default function BookingForm({
 
       <div style={{ display: "flex", gap: 8 }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
-          {saving ? "Booking…" : "Book campaign"}
+          {saving ? "Saving…" : editing ? "Save changes" : "Book campaign"}
         </button>
-        <button type="button" className="btn" onClick={() => router.push("/campaigns")}>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => (onDone ? onDone() : router.push("/campaigns"))}
+        >
           Cancel
         </button>
       </div>

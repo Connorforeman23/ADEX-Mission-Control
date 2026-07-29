@@ -262,3 +262,13 @@ td.r, th.r { text-align: right; }
 .form-grid .wide { grid-column: 1 / -1; }
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; }
 .filters .field { min-width: 170px; }
+
+.row-edit {
+  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  color: var(--faint); border: 1px solid transparent; transition: background .12s, color .12s;
+}
+.row-edit:hover { background: var(--blue-wash); color: var(--blue); border-color: var(--line); }
+.row-edit svg {
+  width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.7; fill: none;
+  stroke-linecap: round; stroke-linejoin: round;
+}
