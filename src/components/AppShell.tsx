@@ -229,8 +229,9 @@ export default function AppShell({
           left: 12px;
           z-index: 55;
         }
-        /* Icon-only mode: labels, group headings and the footer text go;
-           icons centre up and get their label as a tooltip. */
+        /* Icon-only mode: the logo and wordmark go entirely — just the
+           expand/hide controls remain — and labels become tooltips. */
+        .shell.rail-mini .mark,
         .shell.rail-mini .wordmark,
         .shell.rail-mini .nav-group,
         .shell.rail-mini .rail-foot .who div,
@@ -238,13 +239,11 @@ export default function AppShell({
           display: none;
         }
         .shell.rail-mini .brand {
-          flex-direction: column;
-          gap: 8px;
-          padding: 16px 8px 10px;
+          padding: 14px 8px 8px;
+          justify-content: center;
         }
         .shell.rail-mini .rail-controls {
           margin-left: 0;
-          flex-direction: column;
         }
         .shell.rail-mini .nav :global(.nav-item) {
           justify-content: center;
