@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -127,7 +128,10 @@ function LoginForm() {
         </button>
 
         <p style={{ marginTop: 16, fontSize: 12, color: "var(--faint)", textAlign: "center" }}>
-          New here? Use the invite link sent to your work email to set your password first.
+          First time here?{" "}
+          <Link href="/signup" style={{ color: "var(--blue)" }}>
+            Create your account
+          </Link>
         </p>
       </form>
     </div>

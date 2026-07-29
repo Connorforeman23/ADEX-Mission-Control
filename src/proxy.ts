@@ -39,6 +39,7 @@ export default async function proxy(request: NextRequest) {
   // the server — so it must stay reachable while signed out or the invite dies here.
   const isAuthPage =
     path.startsWith("/login") ||
+    path.startsWith("/signup") ||
     path.startsWith("/set-password") ||
     path.startsWith("/auth/");
 
@@ -49,7 +50,7 @@ export default async function proxy(request: NextRequest) {
   }
   // Signed-in users get bounced off /login, but not off /set-password —
   // accepting an invite signs you in first, then you choose a password.
-  if (user && path.startsWith("/login")) {
+  if (user && (path.startsWith("/login") || path.startsWith("/signup"))) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
