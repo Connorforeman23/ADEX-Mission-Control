@@ -268,6 +268,10 @@ td.r, th.r { text-align: right; }
   color: var(--faint); border: 1px solid transparent; transition: background .12s, color .12s;
 }
 .row-edit:hover { background: var(--blue-wash); color: var(--blue); border-color: var(--line); }
+.dl { display: grid; grid-template-columns: 130px 1fr; gap: 9px 14px; font-size: 13px; margin: 0; }
+.dl dt { color: var(--faint); font-size: 12px; }
+.dl dd { margin: 0; font-weight: 540; }
+
 .row-edit svg {
   width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.7; fill: none;
   stroke-linecap: round; stroke-linejoin: round;

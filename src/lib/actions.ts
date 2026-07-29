@@ -249,6 +249,100 @@ export async function updateCampaign(campaignId: string, input: CampaignInput) {
   return { id: campaignId };
 }
 
+/** Record the supplier's invoice against a booking line's purchase order. */
+export async function recordSupplierInvoice(
+  campaignLineId: string,
+  invoiceNo: string,
+  amount: string
+) {
+  const supabase = await createClient();
+  const value = money(amount);
+  if (!value) return { error: "Enter the invoiced net amount." };
+
+  const { error } = await supabase.from("supplier_invoices").upsert(
+    {
+      campaign_line_id: campaignLineId,
+      invoice_no: invoiceNo.trim() || "—",
+      amount: value,
+      approved: false,
+    },
+    { onConflict: "campaign_line_id" }
+  );
+
+  if (error) return { error: error.message };
+  revalidatePath("/finance");
+  revalidatePath("/");
+  return {};
+}
+
+/** Accept a variance so the line stops being flagged. */
+export async function approveVariance(campaignLineId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("supplier_invoices")
+    .update({ approved: true })
+    .eq("campaign_line_id", campaignLineId);
+  if (error) return { error: error.message };
+  revalidatePath("/finance");
+  revalidatePath("/");
+  return {};
+}
+
+// --- pipeline -----------------------------------------------------------
+
+export type LeadInput = {
+  id?: string;
+  name: string;
+  contact: string;
+  sector: string;
+  value: string;
+  stage: string;
+  ownerId: string;
+  nextAction: string;
+};
+
+export async function saveLead(input: LeadInput) {
+  const supabase = await createClient();
+  const name = input.name.trim();
+  if (!name) return { error: "Give the opportunity a name." };
+
+  const row = {
+    name,
+    contact: input.contact.trim() || null,
+    sector: input.sector.trim() || null,
+    value: money(input.value),
+    stage: input.stage,
+    owner_id: input.ownerId || null,
+    next_action: input.nextAction.trim() || null,
+  };
+
+  const { error } = input.id
+    ? await supabase.from("leads").update(row).eq("id", input.id)
+    : await supabase.from("leads").insert(row);
+
+  if (error) return { error: error.message };
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+  return {};
+}
+
+export async function moveLeadStage(id: string, stage: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("leads").update({ stage }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+  return {};
+}
+
+export async function deleteLead(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("leads").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/pipeline");
+  return {};
+}
+
 export async function updateCampaignStatus(id: string, status: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("campaigns").update({ status }).eq("id", id);
