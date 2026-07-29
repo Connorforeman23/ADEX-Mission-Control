@@ -459,6 +459,149 @@ export async function setInvoiceStatus(id: string, status: string) {
   return {};
 }
 
+// --- contacts -----------------------------------------------------------
+
+export type ContactInput = {
+  id?: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  organisation: string;
+  email: string;
+  phone: string;
+  mobile: string;
+  linkedin: string;
+  notes: string;
+  status: string;
+  ownerId: string;
+  leadId?: string;
+};
+
+export async function saveContact(input: ContactInput) {
+  const supabase = await createClient();
+  if (!input.firstName.trim()) return { error: "Give the contact a first name." };
+  if (!input.organisation.trim()) return { error: "Every contact needs an organisation." };
+
+  const row = {
+    first_name: input.firstName.trim(),
+    last_name: input.lastName.trim() || null,
+    job_title: input.jobTitle.trim() || null,
+    organisation: input.organisation.trim(),
+    email: input.email.trim() || null,
+    phone: input.phone.trim() || null,
+    mobile: input.mobile.trim() || null,
+    linkedin: input.linkedin.trim() || null,
+    notes: input.notes.trim() || null,
+    status: input.status,
+    owner_id: input.ownerId || null,
+    lead_id: input.leadId || null,
+  };
+
+  const { error } = input.id
+    ? await supabase.from("contacts").update(row).eq("id", input.id)
+    : await supabase.from("contacts").insert(row);
+
+  if (error) return { error: error.message };
+  revalidatePath("/contacts");
+  return {};
+}
+
+export async function deleteContact(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("contacts").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/contacts");
+  return {};
+}
+
+/**
+ * The compulsory Closed Won step: the organisation becomes a client, an
+ * empty campaign opens ready to book, a task chases the booking, and the
+ * organisation's contacts flip to Client status.
+ */
+async function promoteWonLead(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leadId: string
+) {
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id, name, value, owner_id, sector")
+    .eq("id", leadId)
+    .maybeSingle();
+  if (!lead) return;
+
+  // 1. Client record (find or create by name).
+  const { data: existing } = await supabase
+    .from("clients")
+    .select("id")
+    .ilike("name", lead.name)
+    .maybeSingle();
+
+  let clientId = existing?.id as string | undefined;
+  if (!clientId) {
+    const { data: created } = await supabase
+      .from("clients")
+      .insert({
+        name: lead.name,
+        sector: lead.sector,
+        owner_id: lead.owner_id,
+        status: "live",
+      })
+      .select("id")
+      .single();
+    clientId = created?.id;
+  }
+  if (!clientId) return;
+
+  // 2. An open campaign shell, ready for booking lines.
+  const { data: last } = await supabase
+    .from("campaigns")
+    .select("ref")
+    .order("ref", { ascending: false })
+    .limit(1);
+  const n = last?.[0]?.ref ? parseInt(String(last[0].ref).replace(/\D/g, ""), 10) : 2600;
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .insert({
+      ref: `AE-${(Number.isFinite(n) ? n : 2600) + 1}`,
+      name: `${lead.name} — first campaign`,
+      client_id: clientId,
+      status: "planning",
+      owner_id: lead.owner_id,
+      note: `Auto-created when the ${lead.name} deal closed won (£${Number(lead.value).toLocaleString("en-GB")}). Add booking lines.`,
+    })
+    .select("id, ref")
+    .single();
+
+  // 3. The booking task that makes the step compulsory.
+  await supabase.from("tasks").insert({
+    title: `Book campaign for ${lead.name}`,
+    notes: `Deal closed won at £${Number(lead.value).toLocaleString("en-GB")}. ${campaign ? `Campaign ${campaign.ref} is open — add the booking lines.` : "Open the campaign and add booking lines."}`,
+    due_date: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+    kind: "follow-up",
+    assignee_id: lead.owner_id,
+    campaign_id: campaign?.id ?? null,
+    client_id: clientId,
+    lead_id: lead.id,
+  });
+
+  // 4. Contacts at that organisation become client contacts.
+  await supabase
+    .from("contacts")
+    .update({ status: "Client", client_id: clientId })
+    .eq("lead_id", lead.id);
+  await supabase
+    .from("contacts")
+    .update({ status: "Client", client_id: clientId })
+    .ilike("organisation", lead.name)
+    .is("client_id", null);
+
+  revalidatePath("/clients");
+  revalidatePath("/campaigns");
+  revalidatePath("/tasks");
+  revalidatePath("/contacts");
+}
+
 // --- pipeline -----------------------------------------------------------
 
 export type LeadInput = {
@@ -487,20 +630,44 @@ export async function saveLead(input: LeadInput) {
     next_action: input.nextAction.trim() || null,
   };
 
-  const { error } = input.id
-    ? await supabase.from("leads").update(row).eq("id", input.id)
-    : await supabase.from("leads").insert(row);
+  let becameWon = false;
+  if (input.id) {
+    const { data: before } = await supabase
+      .from("leads")
+      .select("stage")
+      .eq("id", input.id)
+      .maybeSingle();
+    becameWon = before?.stage !== "Closed Won" && input.stage === "Closed Won";
+    const { error } = await supabase.from("leads").update(row).eq("id", input.id);
+    if (error) return { error: error.message };
+    if (becameWon) await promoteWonLead(supabase, input.id);
+  } else {
+    const { data: created, error } = await supabase
+      .from("leads")
+      .insert(row)
+      .select("id")
+      .single();
+    if (error) return { error: error.message };
+    if (input.stage === "Closed Won" && created) await promoteWonLead(supabase, created.id);
+  }
 
-  if (error) return { error: error.message };
   revalidatePath("/pipeline");
   revalidatePath("/");
-  return {};
+  return { promoted: becameWon || input.stage === "Closed Won" };
 }
 
 export async function moveLeadStage(id: string, stage: string) {
   const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("leads")
+    .select("stage")
+    .eq("id", id)
+    .maybeSingle();
   const { error } = await supabase.from("leads").update({ stage }).eq("id", id);
   if (error) return { error: error.message };
+  if (before?.stage !== "Closed Won" && stage === "Closed Won") {
+    await promoteWonLead(supabase, id);
+  }
   revalidatePath("/pipeline");
   revalidatePath("/");
   return {};

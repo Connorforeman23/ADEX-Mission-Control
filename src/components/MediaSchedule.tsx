@@ -34,6 +34,23 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
   const [client, setClient] = useState("All");
   const [owner, setOwner] = useState("All");
 
+  // Fixed quarters around today, plus a custom date range.
+  const quarters = useMemo(() => {
+    const t = new Date(today + "T00:00:00");
+    const qStart = new Date(t.getFullYear(), Math.floor(t.getMonth() / 3) * 3, 1);
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(qStart.getFullYear(), qStart.getMonth() + (i - 1) * 3, 1);
+      return {
+        key: `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`,
+        label: `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`,
+        start: d,
+      };
+    });
+  }, [today]);
+  const [period, setPeriod] = useState(quarters[1].key); // current quarter
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
   const clients = [...new Set(lines.map((l) => l.client))].sort();
   const owners = [...new Set(lines.map((l) => l.owner))].filter((o) => o !== "—").sort();
 
@@ -41,18 +58,20 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
     (l) => (client === "All" || l.client === client) && (owner === "All" || l.owner === owner)
   );
 
-  // The grid starts on the Monday of the earliest booked week, or this week if
-  // nothing is booked, and runs for a quarter.
-  const gridStart = useMemo(() => {
-    if (!filtered.length) return weekStart(new Date());
-    const earliest = filtered
-      .map((l) => new Date(l.start + "T00:00:00").getTime())
-      .sort((a, b) => a - b)[0];
-    return weekStart(new Date(earliest));
-  }, [filtered]);
+  const { gridStart, weeksCount } = useMemo(() => {
+    if (period === "custom" && customFrom && customTo && customTo > customFrom) {
+      const s = weekStart(new Date(customFrom + "T00:00:00"));
+      const e = new Date(customTo + "T00:00:00");
+      const n = Math.min(26, Math.max(4, Math.ceil((e.getTime() - s.getTime()) / (7 * DAY)) + 1));
+      return { gridStart: s, weeksCount: n };
+    }
+    const q = quarters.find((x) => x.key === period) ?? quarters[1];
+    return { gridStart: weekStart(q.start), weeksCount: WEEKS };
+  }, [period, customFrom, customTo, quarters]);
 
-  const weeks = Array.from({ length: WEEKS }, (_, i) => new Date(gridStart.getTime() + i * 7 * DAY));
-  const gridEnd = new Date(gridStart.getTime() + WEEKS * 7 * DAY);
+  const weeks = Array.from({ length: weeksCount }, (_, i) => new Date(gridStart.getTime() + i * 7 * DAY));
+  const gridEnd = new Date(gridStart.getTime() + weeksCount * 7 * DAY);
+  const cols = { gridTemplateColumns: `220px repeat(${weeksCount}, 1fr)` };
 
   const grouped = new Map<string, PlanLine[]>();
   filtered.forEach((l) => {
@@ -65,7 +84,7 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
   const todayOffset =
     now < gridStart.getTime() || now > gridEnd.getTime()
       ? null
-      : ((now - gridStart.getTime()) / (WEEKS * 7 * DAY)) * 100;
+      : ((now - gridStart.getTime()) / (weeksCount * 7 * DAY)) * 100;
 
   const committed = filtered.reduce((a, l) => a + l.net, 0);
 
@@ -90,6 +109,39 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
             ))}
           </select>
         </label>
+        <label className="field">
+          <span>Period</span>
+          <select className="input" value={period} onChange={(e) => setPeriod(e.target.value)}>
+            {quarters.map((q) => (
+              <option key={q.key} value={q.key}>
+                {q.label}
+              </option>
+            ))}
+            <option value="custom">Custom range…</option>
+          </select>
+        </label>
+        {period === "custom" && (
+          <>
+            <label className="field">
+              <span>From</span>
+              <input
+                className="input num"
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>To</span>
+              <input
+                className="input num"
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+              />
+            </label>
+          </>
+        )}
         <button
           className="btn"
           onClick={() => {
@@ -108,8 +160,8 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
         <div className="card-head">
           <h2>Schedule</h2>
           <span className="sub">
-            13 weeks from {dateShortGB(gridStart.toISOString().slice(0, 10))} · bars show in-market
-            weeks
+            {weeksCount} weeks from {dateShortGB(gridStart.toISOString().slice(0, 10))} · bars show
+            in-market weeks
           </span>
         </div>
         <div className="card-body" style={{ padding: "12px 6px 6px" }}>
@@ -120,7 +172,7 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
           ) : (
             <div className="sched">
               <div className="sched-inner">
-                <div className="sched-head">
+                <div className="sched-head" style={cols}>
                   <div>Client / supplier</div>
                   {weeks.map((w) => (
                     <div key={w.toISOString()}>{dateShortGB(w.toISOString().slice(0, 10))}</div>
@@ -139,17 +191,17 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
                     const s = new Date(l.start + "T00:00:00").getTime();
                     const e = new Date(l.end + "T00:00:00").getTime();
                     const from = Math.max(0, Math.floor((s - gridStart.getTime()) / (7 * DAY)));
-                    const to = Math.min(WEEKS - 1, Math.floor((e - gridStart.getTime()) / (7 * DAY)));
-                    if (to < 0 || from > WEEKS - 1) return null;
+                    const to = Math.min(weeksCount - 1, Math.floor((e - gridStart.getTime()) / (7 * DAY)));
+                    if (to < 0 || from > weeksCount - 1) return null;
                     return (
-                      <div className="sched-row" key={l.id}>
+                      <div className="sched-row" style={cols} key={l.id}>
                         <div className="sched-label">
                           <p>{i === 0 ? clientName : " "}</p>
                           <small>
                             {l.vendor} · {channelLabel(l.channel)}
                           </small>
                         </div>
-                        {Array.from({ length: WEEKS }, (_, w) => (
+                        {Array.from({ length: weeksCount }, (_, w) => (
                           <div className="sched-cell" style={{ gridColumn: w + 2 }} key={w} />
                         ))}
                         <div

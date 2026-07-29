@@ -18,18 +18,24 @@ const blank = (assigneeId: string): TaskInput => ({
 export default function TasksPanel({
   tasks,
   staff,
+  clients,
+  meId,
   today,
   openNew,
 }: {
   tasks: TaskRow[];
   staff: { id: string; full_name: string }[];
+  clients: { id: string; name: string }[];
+  /** Signed-in user — new tasks default to them. */
+  meId: string;
   today: string;
   openNew?: boolean;
 }) {
   const router = useRouter();
   const [who, setWho] = useState("All");
   const [show, setShow] = useState<"open" | "done">("open");
-  const [editing, setEditing] = useState<TaskInput | null>(openNew ? blank(staff[0]?.id ?? "") : null);
+  const defaultAssignee = staff.some((s) => s.id === meId) ? meId : staff[0]?.id ?? "";
+  const [editing, setEditing] = useState<TaskInput | null>(openNew ? blank(defaultAssignee) : null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,7 +83,7 @@ export default function TasksPanel({
             className="btn btn-primary"
             onClick={() => {
               setError(null);
-              setEditing(blank(staff[0]?.id ?? ""));
+              setEditing(blank(defaultAssignee));
             }}
           >
             New task
@@ -201,6 +207,22 @@ export default function TasksPanel({
                   {staff.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.full_name}
+                      {s.id === meId ? " (you)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Client (optional)</span>
+                <select
+                  className="input"
+                  value={editing.clientId ?? ""}
+                  onChange={(e) => setEditing({ ...editing, clientId: e.target.value || undefined })}
+                >
+                  <option value="">—</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
                 </select>

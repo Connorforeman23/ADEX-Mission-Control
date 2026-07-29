@@ -10,9 +10,13 @@ export default async function TasksPage({
   searchParams: Promise<{ new?: string }>;
 }) {
   const supabase = await createClient();
-  const [tasks, { data: staff }, params] = await Promise.all([
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const [tasks, { data: staff }, { data: clients }, params] = await Promise.all([
     getTasks(),
     supabase.from("profiles").select("id, full_name").order("full_name"),
+    supabase.from("clients").select("id, name").order("name"),
     searchParams,
   ]);
 
@@ -67,7 +71,14 @@ export default async function TasksPage({
         </div>
       </div>
 
-      <TasksPanel tasks={tasks} staff={staff ?? []} today={today} openNew={params.new === "1"} />
+      <TasksPanel
+        tasks={tasks}
+        staff={staff ?? []}
+        clients={clients ?? []}
+        meId={user?.id ?? ""}
+        today={today}
+        openNew={params.new === "1"}
+      />
     </div>
   );
 }

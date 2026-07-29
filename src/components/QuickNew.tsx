@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 const OPTIONS = [
   { href: "/campaigns?new=1", label: "Campaign", hint: "Book media with charges and POs" },
+  { href: "/contacts?new=1", label: "Contact", hint: "Someone you're prospecting" },
   { href: "/pipeline?new=1", label: "Opportunity", hint: "New business conversation" },
   { href: "/creative?new=1", label: "Creative brief", hint: "Studio work for the board" },
   { href: "/tasks?new=1", label: "Task / reminder", hint: "Follow-up with a date and owner" },

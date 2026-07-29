@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function CampaignsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; open?: string }>;
 }) {
   const supabase = await createClient();
   const [campaigns, { data: clients }, { data: staff }, params] = await Promise.all([
@@ -35,6 +35,7 @@ export default async function CampaignsPage({
         clients={clients ?? []}
         staffList={staff ?? []}
         openNew={params.new === "1"}
+        openId={params.open}
       />
     </div>
   );

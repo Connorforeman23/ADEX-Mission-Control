@@ -22,10 +22,12 @@ import {
   type Campaign,
 } from "@/lib/money";
 import { CAMPAIGN_STATUSES } from "@/lib/reference";
+import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
 import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
 import BookingForm, { type EditingCampaign } from "@/components/BookingForm";
+import { updateCampaignStatus } from "@/lib/actions";
 
 const BOARD_COLUMNS: { key: string; label: string; stripe: string }[] = [
   { key: "planning", label: "Planning", stripe: "var(--warn)" },
@@ -39,11 +41,14 @@ export default function CampaignTable({
   clients,
   staffList,
   openNew,
+  openId,
 }: {
   campaigns: Campaign[];
   clients: { id: string; name: string }[];
   staffList: { id: string; full_name: string }[];
   openNew?: boolean;
+  /** Campaign id to open in the detail panel on arrival (dashboard click-through). */
+  openId?: string;
 }) {
   const [staff, setStaff] = useState("All");
   const [client, setClient] = useState("All");
@@ -51,7 +56,19 @@ export default function CampaignTable({
   const [channel, setChannel] = useState("All");
   const [view, setView] = useState<"list" | "board">("list");
   const [editor, setEditor] = useState<{ open: boolean; editing?: EditingCampaign }>({ open: !!openNew });
-  const [detail, setDetail] = useState<Campaign | null>(null);
+  const [detail, setDetail] = useState<Campaign | null>(
+    openId ? campaigns.find((c) => c.id === openId) ?? null : null
+  );
+  const router = useRouter();
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropCol, setDropCol] = useState<string | null>(null);
+
+  async function moveTo(campaignId: string, status: string) {
+    setDragId(null);
+    setDropCol(null);
+    await updateCampaignStatus(campaignId, status);
+    router.refresh();
+  }
 
   const staffIdByName = useMemo(
     () => new Map(staffList.map((s) => [s.full_name, s.id])),
@@ -277,13 +294,30 @@ export default function CampaignTable({
         </section>
       ) : (
         <div className="board">
-          {BOARD_COLUMNS.map((col) => {
+          {BOARD_COLUMNS.map((col, colIdx) => {
             const set = rows.filter((c) =>
               col.key === "live" ? c.status === "live" || c.status === "risk" : c.status === col.key
             );
             const value = set.reduce((a, c) => a + clientGross(c), 0);
             return (
-              <div className="col" key={col.key}>
+              <div
+                className="col"
+                key={col.key}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDropCol(col.key);
+                }}
+                onDragLeave={() => setDropCol((d) => (d === col.key ? null : d))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragId) moveTo(dragId, col.key);
+                }}
+                style={
+                  dropCol === col.key && dragId
+                    ? { outline: "2px dashed var(--blue)", outlineOffset: -2 }
+                    : undefined
+                }
+              >
                 <div className="col-head">
                   <span className="stripe" style={{ background: col.stripe }} />
                   <h3>{col.label}</h3>
@@ -293,11 +327,22 @@ export default function CampaignTable({
                 </div>
                 {set.length === 0 ? (
                   <p className="empty-note" style={{ padding: "12px 4px" }}>
-                    Nothing here
+                    {dragId ? "Drop here" : "Nothing here"}
                   </p>
                 ) : (
                   set.map((c) => (
-                    <div className="tile" key={c.id} onClick={() => setDetail(c)} style={{ cursor: "pointer" }}>
+                    <div
+                      className="tile"
+                      key={c.id}
+                      draggable
+                      onDragStart={() => setDragId(c.id)}
+                      onDragEnd={() => {
+                        setDragId(null);
+                        setDropCol(null);
+                      }}
+                      onClick={() => setDetail(c)}
+                      style={{ cursor: "grab", opacity: dragId === c.id ? 0.5 : 1 }}
+                    >
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
                         <div className="strong" style={{ flex: 1, minWidth: 0 }}>
                           {c.name}
@@ -329,6 +374,31 @@ export default function CampaignTable({
                             c.ref
                           )}
                         </span>
+                      </div>
+                      <div className="tile-move">
+                        {colIdx > 0 && (
+                          <button
+                            className="btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveTo(c.id, BOARD_COLUMNS[colIdx - 1].key);
+                            }}
+                          >
+                            ← {BOARD_COLUMNS[colIdx - 1].label}
+                          </button>
+                        )}
+                        {colIdx < BOARD_COLUMNS.length - 1 && (
+                          <button
+                            className="btn"
+                            style={{ marginLeft: "auto" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveTo(c.id, BOARD_COLUMNS[colIdx + 1].key);
+                            }}
+                          >
+                            {BOARD_COLUMNS[colIdx + 1].label} →
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))

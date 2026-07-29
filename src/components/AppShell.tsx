@@ -22,6 +22,7 @@ const NAV = [
     group: "Grow",
     items: [
       { href: "/clients", label: "Clients", icon: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 20a6 6 0 0 1 12 0M18 20a5.5 5.5 0 0 0-3-4.9" },
+      { href: "/contacts", label: "Contacts", icon: "M16 4h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-1M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 21a6 6 0 0 1 12 0M3 8h4M3 12h4" },
       { href: "/pipeline", label: "Pipeline", icon: "M4 5h16M6 12h12M9 19h6" },
     ],
   },
@@ -49,6 +50,17 @@ export default function AppShell({
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Sidebar mode, remembered between visits: full, icon-only, or hidden.
+  const [railMode, setRailMode] = useState<"full" | "mini" | "hidden">(() => {
+    if (typeof window === "undefined") return "full";
+    const stored = localStorage.getItem("adex-rail");
+    return stored === "mini" || stored === "hidden" ? stored : "full";
+  });
+  function setRail(mode: "full" | "mini" | "hidden") {
+    setRailMode(mode);
+    localStorage.setItem("adex-rail", mode);
+  }
+
   // The inline script in the document head has already applied the saved
   // theme, so read the result rather than duplicating that logic here.
   const [dark, setDark] = useState(() => {
@@ -73,7 +85,7 @@ export default function AppShell({
   }
 
   return (
-    <div className="shell">
+    <div className={`shell rail-${railMode}`}>
       <aside className={`rail${menuOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="mark">
@@ -82,6 +94,28 @@ export default function AppShell({
           <div className="wordmark">
             <b>ADEX CRM</b>
             <i>MISSION CONTROL</i>
+          </div>
+          <div className="rail-controls">
+            <button
+              className="rail-btn"
+              title={railMode === "mini" ? "Expand sidebar" : "Minimise sidebar"}
+              aria-label={railMode === "mini" ? "Expand sidebar" : "Minimise sidebar"}
+              onClick={() => setRail(railMode === "mini" ? "full" : "mini")}
+            >
+              <svg viewBox="0 0 24 24">
+                {railMode === "mini" ? <path d="m9 6 6 6-6 6" /> : <path d="m15 6-6 6 6 6" />}
+              </svg>
+            </button>
+            <button
+              className="rail-btn"
+              title="Hide sidebar"
+              aria-label="Hide sidebar"
+              onClick={() => setRail("hidden")}
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -96,6 +130,7 @@ export default function AppShell({
                     key={item.href}
                     href={item.href}
                     className={active ? "nav-item on" : "nav-item"}
+                    title={item.label}
                     onClick={() => setMenuOpen(false)}
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -133,6 +168,16 @@ export default function AppShell({
         <button className="menu-btn btn" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
           ☰
         </button>
+        {railMode === "hidden" && (
+          <button
+            className="rail-reveal btn"
+            onClick={() => setRail("full")}
+            aria-label="Show sidebar"
+            title="Show sidebar"
+          >
+            ☰
+          </button>
+        )}
         {children}
       </main>
 
@@ -141,6 +186,78 @@ export default function AppShell({
           display: grid;
           grid-template-columns: 244px minmax(0, 1fr);
           min-height: 100vh;
+          transition: grid-template-columns 0.18s ease;
+        }
+        .shell.rail-mini {
+          grid-template-columns: 64px minmax(0, 1fr);
+        }
+        .shell.rail-hidden {
+          grid-template-columns: 0 minmax(0, 1fr);
+        }
+        .shell.rail-hidden .rail {
+          transform: translateX(-102%);
+        }
+        .rail-controls {
+          margin-left: auto;
+          display: flex;
+          gap: 2px;
+        }
+        .rail-btn {
+          width: 24px;
+          height: 24px;
+          border-radius: 7px;
+          display: grid;
+          place-items: center;
+          color: var(--faint);
+        }
+        .rail-btn:hover {
+          background: var(--surface-2);
+          color: var(--text);
+        }
+        .rail-btn svg {
+          width: 14px;
+          height: 14px;
+          stroke: currentColor;
+          stroke-width: 2;
+          fill: none;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .rail-reveal {
+          position: fixed;
+          top: 12px;
+          left: 12px;
+          z-index: 55;
+        }
+        /* Icon-only mode: labels, group headings and the footer text go;
+           icons centre up and get their label as a tooltip. */
+        .shell.rail-mini .wordmark,
+        .shell.rail-mini .nav-group,
+        .shell.rail-mini .rail-foot .who div,
+        .shell.rail-mini .strap {
+          display: none;
+        }
+        .shell.rail-mini .brand {
+          flex-direction: column;
+          gap: 8px;
+          padding: 16px 8px 10px;
+        }
+        .shell.rail-mini .rail-controls {
+          margin-left: 0;
+          flex-direction: column;
+        }
+        .shell.rail-mini .nav :global(.nav-item) {
+          justify-content: center;
+          padding: 10px 0;
+        }
+        .shell.rail-mini .nav :global(.nav-item span) {
+          display: none;
+        }
+        .shell.rail-mini .rail-foot {
+          padding: 10px 6px;
+        }
+        .shell.rail-mini .rail-foot > div:last-of-type {
+          flex-direction: column;
         }
         .rail {
           position: sticky;

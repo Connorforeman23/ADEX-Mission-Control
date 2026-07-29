@@ -296,6 +296,12 @@ td.r, th.r { text-align: right; }
 }
 .board .tile:hover { transform: translateY(-2px); border-color: var(--blue); }
 .board .tile-foot { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.board .tile-move {
+  display: none; gap: 6px; margin-top: 9px; padding-top: 9px;
+  border-top: 1px solid var(--line-soft);
+}
+.board .tile:hover .tile-move { display: flex; }
+.board .tile-move .btn { padding: 4px 9px; font-size: 11px; border-radius: 8px; }
 
 /* ---- channel chips ---- */
 .chan {

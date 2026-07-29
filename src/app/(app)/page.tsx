@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCampaigns, getOpenLeads, getPoVariances, getTasks } from "@/lib/queries";
 import QuickNew from "@/components/QuickNew";
 import {
@@ -149,10 +150,14 @@ export default async function DashboardPage() {
                   <tbody>
                     {liveCampaigns.map((c) => (
                       <tr key={c.id}>
-                        <td className="num ref">{c.ref}</td>
+                        <td className="num ref">
+                          <Link href={`/campaigns?open=${c.id}`}>{c.ref}</Link>
+                        </td>
                         <td>
-                          <div className="strong">{c.name}</div>
-                          <div className="sub-line">{c.clients?.name ?? "—"}</div>
+                          <Link href={`/campaigns?open=${c.id}`} style={{ display: "block" }}>
+                            <div className="strong">{c.name}</div>
+                            <div className="sub-line">{c.clients?.name ?? "—"}</div>
+                          </Link>
                         </td>
                         <td className="r num">{gbp(clientGross(c))}</td>
                         <td className="r num" style={{ color: "var(--ok)" }}>
@@ -183,7 +188,7 @@ export default async function DashboardPage() {
             {dueTasks.length > 0 && (
               <div className="rows" style={{ marginBottom: variances.length + lowMargin.length ? 8 : 0 }}>
                 {dueTasks.map((t) => (
-                  <div className="row" key={t.id}>
+                  <Link className="row" href="/tasks" key={t.id}>
                     <span className="flag warn">✓</span>
                     <div className="grow">
                       <p>{t.title}</p>
@@ -194,7 +199,7 @@ export default async function DashboardPage() {
                     <span className="num" style={{ color: "var(--warn)", whiteSpace: "nowrap" }}>
                       due
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
@@ -203,7 +208,7 @@ export default async function DashboardPage() {
             ) : (
               <div className="rows">
                 {variances.map((v) => (
-                  <div className="row" key={v.line_id}>
+                  <Link className="row" href="/finance" key={v.line_id}>
                     <span className="flag crit">PO</span>
                     <div className="grow">
                       <p>
@@ -217,10 +222,10 @@ export default async function DashboardPage() {
                       {v.diff > 0 ? "+" : "−"}
                       {gbp(Math.abs(v.diff))}
                     </span>
-                  </div>
+                  </Link>
                 ))}
                 {lowMargin.map((c) => (
-                  <div className="row" key={c.id}>
+                  <Link className="row" href={`/campaigns?open=${c.id}`} key={c.id}>
                     <span className="flag warn">%</span>
                     <div className="grow">
                       <p>
@@ -233,7 +238,7 @@ export default async function DashboardPage() {
                     <span className="num" style={{ color: "var(--warn)" }}>
                       {gbp(supplierNet(c))}
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
