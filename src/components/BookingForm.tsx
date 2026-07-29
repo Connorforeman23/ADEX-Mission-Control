@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createCampaign, updateCampaign, type LineInput } from "@/lib/actions";
+import { createCampaign, deleteCampaign, updateCampaign, type LineInput } from "@/lib/actions";
 import {
   CAMPAIGN_STATUSES,
   COPY_OPTIONS,
@@ -385,7 +385,7 @@ export default function BookingForm({
         <p style={{ color: "var(--crit)", fontSize: 13, margin: 0 }}>{error}</p>
       )}
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? "Saving…" : editing ? "Save changes" : "Book campaign"}
         </button>
@@ -396,6 +396,25 @@ export default function BookingForm({
         >
           Cancel
         </button>
+        {editing && (
+          <button
+            type="button"
+            className="btn"
+            style={{ marginLeft: "auto", color: "var(--crit)" }}
+            disabled={saving}
+            onClick={async () => {
+              if (!confirm(`Delete ${editing.name}? This removes its booking lines and purchase orders.`)) return;
+              setSaving(true);
+              const res = await deleteCampaign(editing.id);
+              setSaving(false);
+              if (res.error) return setError(res.error);
+              if (onDone) onDone();
+              router.refresh();
+            }}
+          >
+            Delete campaign
+          </button>
+        )}
       </div>
 
       <style jsx>{`

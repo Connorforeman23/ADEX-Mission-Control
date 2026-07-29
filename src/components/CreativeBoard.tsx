@@ -48,10 +48,13 @@ export default function CreativeBoard({
   items,
   clients,
   staff,
+  today,
 }: {
   items: CreativeRow[];
   clients: { id: string; name: string }[];
   staff: { id: string; full_name: string }[];
+  /** Passed from the server so overdue flagging renders identically on both. */
+  today: string;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<CreativeInput | null>(null);
@@ -82,8 +85,6 @@ export default function CreativeBoard({
     setEditing(null);
     router.refresh();
   }
-
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <>
@@ -275,66 +276,6 @@ export default function CreativeBoard({
         )}
       </Drawer>
 
-      <style jsx>{`
-        .board {
-          display: grid;
-          gap: 12px;
-          grid-auto-flow: column;
-          grid-auto-columns: minmax(248px, 1fr);
-          overflow-x: auto;
-          padding-bottom: 8px;
-        }
-        .col {
-          background: var(--surface-2);
-          border: 1px solid var(--line-soft);
-          border-radius: 16px;
-          padding: 11px;
-          min-height: 200px;
-        }
-        .col-head {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 10px;
-          padding: 0 3px;
-        }
-        .col-head h3 {
-          margin: 0;
-          font-size: 12.5px;
-          font-weight: 620;
-        }
-        .col-head span:last-child {
-          margin-left: auto;
-        }
-        .stripe {
-          width: 20px;
-          height: 3px;
-          border-radius: 99px;
-        }
-        .tile {
-          display: block;
-          width: 100%;
-          text-align: left;
-          background: var(--surface);
-          border: 1px solid var(--line);
-          border-radius: 12px;
-          padding: 11px 12px;
-          margin-bottom: 9px;
-          box-shadow: var(--shadow-card);
-          transition: transform 0.12s, border-color 0.12s;
-        }
-        .tile:hover {
-          transform: translateY(-2px);
-          border-color: var(--blue);
-        }
-        .tile-foot {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          margin-top: 9px;
-        }
-      `}</style>
     </>
   );
 }

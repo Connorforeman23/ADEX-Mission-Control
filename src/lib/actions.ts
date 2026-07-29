@@ -395,6 +395,18 @@ export async function deleteCreativeItem(id: string) {
   return {};
 }
 
+/** Remove a campaign and its booking lines. Its purchase orders go with it. */
+export async function deleteCampaign(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("campaigns").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/campaigns");
+  revalidatePath("/finance");
+  revalidatePath("/media-plan");
+  revalidatePath("/");
+  return {};
+}
+
 export async function updateCampaignStatus(id: string, status: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("campaigns").update({ status }).eq("id", id);

@@ -48,13 +48,22 @@ export default async function DashboardPage() {
     const owner = c.profiles?.full_name ?? "Unassigned";
     byOwner.set(owner, (byOwner.get(owner) ?? 0) + clientGross(c));
   });
+  // Each owner keeps the same colour wherever they appear.
+  const OWNER_COLOURS = [
+    "var(--c-digital)",
+    "var(--c-tv)",
+    "var(--c-radio)",
+    "var(--c-ooh)",
+    "var(--c-print)",
+    "var(--c-creative)",
+  ];
   const salesRows: BarRow[] = [...byOwner.entries()]
-    .map(([label, value]) => ({
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value], i) => ({
       label,
       value,
-      colour: "linear-gradient(90deg, var(--blue), var(--pink))",
-    }))
-    .sort((a, b) => b.value - a.value);
+      colour: OWNER_COLOURS[i % OWNER_COLOURS.length],
+    }));
 
   const lowMargin = openBook.filter((c) => clientGross(c) > 0 && dealMargin(c) < MARGIN_FLOOR);
 

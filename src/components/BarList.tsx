@@ -19,9 +19,50 @@ export default function BarList({ rows, empty }: { rows: BarRow[]; empty: string
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Stacked share bar — the whole mix at a glance, in channel colours. */}
+      <div
+        style={{
+          display: "flex",
+          height: 10,
+          borderRadius: 99,
+          overflow: "hidden",
+          gap: 2,
+          marginBottom: 2,
+        }}
+      >
+        {rows.map((r) => (
+          <div
+            key={r.label}
+            title={`${r.label} — ${Math.round((r.value / total) * 100)}%`}
+            style={{ width: `${(r.value / total) * 100}%`, background: r.colour }}
+          />
+        ))}
+      </div>
+
       {rows.map((r) => (
         <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ minWidth: 104, fontSize: 12.5, color: "var(--mid)" }}>{r.label}</span>
+          <span
+            style={{
+              minWidth: 104,
+              fontSize: 12.5,
+              color: "var(--mid)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <i
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: r.colour,
+                display: "block",
+                flex: "none",
+              }}
+            />
+            {r.label}
+          </span>
           <div
             style={{
               flex: 1,
@@ -37,6 +78,7 @@ export default function BarList({ rows, empty }: { rows: BarRow[]; empty: string
                 height: "100%",
                 borderRadius: 99,
                 background: r.colour,
+                boxShadow: `0 0 12px -2px ${r.colour}`,
               }}
             />
           </div>

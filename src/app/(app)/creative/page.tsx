@@ -85,7 +85,7 @@ export default async function CreativePage() {
         </div>
       </div>
 
-      <CreativeBoard items={items} clients={clients ?? []} staff={staff ?? []} />
+      <CreativeBoard items={items} clients={clients ?? []} staff={staff ?? []} today={today} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
+import Segmented from "@/components/Segmented";
 import { gbp, gbpK } from "@/lib/money";
 import { deleteLead, moveLeadStage, saveLead, type LeadInput } from "@/lib/actions";
 
@@ -22,6 +23,13 @@ export type LeadRow = {
 export const STAGES = ["Engaged", "Proposal", "Closed Won", "Closed Lost"];
 const OPEN_STAGES = ["Engaged", "Proposal"];
 const WEIGHTS: Record<string, number> = { Engaged: 0.4, Proposal: 0.7 };
+
+const STAGE_TINT: Record<string, string> = {
+  Engaged: "var(--blue)",
+  Proposal: "var(--pink)",
+  "Closed Won": "var(--ok)",
+  "Closed Lost": "var(--crit)",
+};
 
 const STAGE_CLASS: Record<string, string> = {
   Engaged: "booked",
@@ -105,28 +113,26 @@ export default function PipelineBoard({
             ))}
           </select>
         </label>
-        <label className="field">
-          <span>View</span>
-          <select
-            className="input"
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          <Segmented
             value={view}
-            onChange={(e) => setView(e.target.value as "board" | "list" | "forecast")}
+            onChange={setView}
+            options={[
+              { value: "board", label: "Board" },
+              { value: "list", label: "List" },
+              { value: "forecast", label: "Forecast" },
+            ]}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setError(null);
+              setEditing(blank(staff[0]?.id ?? ""));
+            }}
           >
-            <option value="board">Board</option>
-            <option value="list">List</option>
-            <option value="forecast">Forecast</option>
-          </select>
-        </label>
-        <button
-          className="btn btn-primary"
-          style={{ marginLeft: "auto" }}
-          onClick={() => {
-            setError(null);
-            setEditing(blank(staff[0]?.id ?? ""));
-          }}
-        >
-          Add opportunity
-        </button>
+            Add opportunity
+          </button>
+        </div>
       </div>
 
       {view === "board" && (
@@ -137,8 +143,9 @@ export default function PipelineBoard({
             return (
               <div className="col" key={stage}>
                 <div className="col-head">
+                  <span className="stripe" style={{ background: STAGE_TINT[stage] }} />
                   <h3>{stage}</h3>
-                  <span className="num sub-line">
+                  <span className="count">
                     {set.length} · {gbpK(total)}
                   </span>
                 </div>
@@ -389,61 +396,6 @@ export default function PipelineBoard({
         )}
       </Drawer>
 
-      <style jsx>{`
-        .board {
-          display: grid;
-          gap: 12px;
-          grid-auto-flow: column;
-          grid-auto-columns: minmax(250px, 1fr);
-          overflow-x: auto;
-          padding-bottom: 8px;
-        }
-        .col {
-          background: var(--surface-2);
-          border: 1px solid var(--line-soft);
-          border-radius: 16px;
-          padding: 11px;
-          min-height: 200px;
-        }
-        .col-head {
-          display: flex;
-          align-items: baseline;
-          gap: 8px;
-          margin-bottom: 10px;
-          padding: 0 3px;
-        }
-        .col-head h3 {
-          margin: 0;
-          font-size: 12.5px;
-          font-weight: 620;
-        }
-        .col-head span {
-          margin-left: auto;
-        }
-        .tile {
-          display: block;
-          width: 100%;
-          text-align: left;
-          background: var(--surface);
-          border: 1px solid var(--line);
-          border-radius: 12px;
-          padding: 11px 12px;
-          margin-bottom: 9px;
-          box-shadow: var(--shadow-card);
-          transition: transform 0.12s, border-color 0.12s;
-        }
-        .tile:hover {
-          transform: translateY(-2px);
-          border-color: var(--blue);
-        }
-        .tile-foot {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          margin-top: 8px;
-        }
-      `}</style>
     </>
   );
 }

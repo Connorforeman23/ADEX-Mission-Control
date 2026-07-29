@@ -165,6 +165,12 @@ create table if not exists creative_items (
 -- query layer, same convention as SpiraX Sentinel — RLS here is just
 -- "must be logged in", not per-column.
 -- ---------------------------------------------------------------------------
+-- staff_roles holds everyone's email, name and role. It is never read
+-- directly by the app — only through the security-definer functions
+-- is_staff_email() and handle_new_user() — so it gets RLS with no policy,
+-- which denies every client while those functions still work.
+alter table staff_roles enable row level security;
+
 alter table profiles enable row level security;
 alter table clients enable row level security;
 alter table campaigns enable row level security;

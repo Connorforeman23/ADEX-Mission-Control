@@ -1,23 +1,37 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
   CHANNELS,
+  CHANNEL_COLOUR,
   channelLabel,
   clientGross,
+  commissionOf,
   dateGB,
   dealMargin,
   dealProfit,
   gbp,
+  gbpK,
+  markupOf,
   MARGIN_FLOOR,
+  rangeGB,
   STATUS_LABEL,
+  supplierGross,
   supplierNet,
+  vatOn,
   type Campaign,
 } from "@/lib/money";
 import { CAMPAIGN_STATUSES } from "@/lib/reference";
 import Drawer from "@/components/Drawer";
+import Segmented from "@/components/Segmented";
 import BookingForm, { type EditingCampaign } from "@/components/BookingForm";
+
+const BOARD_COLUMNS: { key: string; label: string; stripe: string }[] = [
+  { key: "planning", label: "Planning", stripe: "var(--warn)" },
+  { key: "booked", label: "Booked", stripe: "var(--blue)" },
+  { key: "live", label: "Live", stripe: "var(--ok)" },
+  { key: "done", label: "Complete", stripe: "var(--idle)" },
+];
 
 export default function CampaignTable({
   campaigns,
@@ -32,44 +46,14 @@ export default function CampaignTable({
   const [client, setClient] = useState("All");
   const [status, setStatus] = useState("All");
   const [channel, setChannel] = useState("All");
-  const [drawer, setDrawer] = useState<{ open: boolean; editing?: EditingCampaign }>({ open: false });
+  const [view, setView] = useState<"list" | "board">("list");
+  const [editor, setEditor] = useState<{ open: boolean; editing?: EditingCampaign }>({ open: false });
+  const [detail, setDetail] = useState<Campaign | null>(null);
 
   const staffIdByName = useMemo(
     () => new Map(staffList.map((s) => [s.full_name, s.id])),
     [staffList]
   );
-
-  function openEdit(c: Campaign) {
-    setDrawer({
-      open: true,
-      editing: {
-        id: c.id,
-        name: c.name,
-        clientName: c.clients?.name ?? "",
-        ownerId: staffIdByName.get(c.profiles?.full_name ?? "") ?? "",
-        status: c.status,
-        region: c.region,
-        fee: String(c.fee ?? 0),
-        note: "",
-        lines: c.campaign_lines.map((l) => ({
-          id: l.id,
-          channel: l.channel,
-          vendor: l.vendor,
-          detail: l.detail ?? "",
-          start_date: l.start_date,
-          end_date: l.end_date,
-          selected_dates: l.selected_dates ?? "",
-          cpt: l.cpt != null ? String(l.cpt) : "",
-          ooh_format: l.ooh_format ?? "6 Sheet",
-          ooh_disp_type: l.ooh_disp_type ?? "Static",
-          copy_instruction: l.copy_instruction ?? "New Copy",
-          urn: l.urn ?? "",
-          supplier_gross: String(l.supplier_gross ?? ""),
-          client_charge: String(l.client_charge ?? ""),
-        })),
-      },
-    });
-  }
 
   const staffOptions = useMemo(
     () => [...new Set(campaigns.map((c) => c.profiles?.full_name).filter(Boolean))].sort() as string[],
@@ -88,11 +72,49 @@ export default function CampaignTable({
       (channel === "All" || c.campaign_lines.some((l) => l.channel === channel))
   );
 
-  const clearAll = () => {
-    setStaff("All");
-    setClient("All");
-    setStatus("All");
-    setChannel("All");
+  function toEditing(c: Campaign): EditingCampaign {
+    return {
+      id: c.id,
+      name: c.name,
+      clientName: c.clients?.name ?? "",
+      ownerId: staffIdByName.get(c.profiles?.full_name ?? "") ?? "",
+      status: c.status,
+      region: c.region,
+      fee: String(c.fee ?? 0),
+      note: "",
+      lines: c.campaign_lines.map((l) => ({
+        id: l.id,
+        channel: l.channel,
+        vendor: l.vendor,
+        detail: l.detail ?? "",
+        start_date: l.start_date,
+        end_date: l.end_date,
+        selected_dates: l.selected_dates ?? "",
+        cpt: l.cpt != null ? String(l.cpt) : "",
+        ooh_format: l.ooh_format ?? "6 Sheet",
+        ooh_disp_type: l.ooh_disp_type ?? "Static",
+        copy_instruction: l.copy_instruction ?? "New Copy",
+        urn: l.urn ?? "",
+        supplier_gross: String(l.supplier_gross ?? ""),
+        client_charge: String(l.client_charge ?? ""),
+      })),
+    };
+  }
+
+  const openEdit = (c: Campaign) => setEditor({ open: true, editing: toEditing(c) });
+
+  const channelChips = (c: Campaign) => {
+    const set = [...new Set(c.campaign_lines.map((l) => l.channel))];
+    return (
+      <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+        {set.map((ch) => (
+          <span className="chan" key={ch}>
+            <i style={{ background: CHANNEL_COLOUR[ch] }} />
+            {channelLabel(ch)}
+          </span>
+        ))}
+      </span>
+    );
   };
 
   return (
@@ -138,27 +160,46 @@ export default function CampaignTable({
             ))}
           </select>
         </label>
-        <button className="btn" onClick={clearAll}>
+        <button
+          className="btn"
+          onClick={() => {
+            setStaff("All");
+            setClient("All");
+            setStatus("All");
+            setChannel("All");
+          }}
+        >
           Clear
         </button>
-        <button
-          className="btn btn-primary"
-          style={{ marginLeft: "auto" }}
-          onClick={() => setDrawer({ open: true })}
-        >
-          New campaign
-        </button>
+
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          <Segmented
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "list", label: "List" },
+              { value: "board", label: "Board" },
+            ]}
+          />
+          <button className="btn btn-primary" onClick={() => setEditor({ open: true })}>
+            New campaign
+          </button>
+        </div>
       </div>
 
-      <section className="card">
-        <div className="card-body" style={{ padding: 0 }}>
-          {rows.length === 0 ? (
-            <p className="empty-note" style={{ padding: "20px 16px" }}>
+      {rows.length === 0 ? (
+        <section className="card">
+          <div className="card-body">
+            <p className="empty-note">
               {campaigns.length === 0
                 ? "No campaigns booked yet. Use “New campaign” to book the first one."
                 : "No campaigns match those filters."}
             </p>
-          ) : (
+          </div>
+        </section>
+      ) : view === "list" ? (
+        <section className="card">
+          <div className="card-body" style={{ padding: 0 }}>
             <div className="table-wrap">
               <table>
                 <thead>
@@ -179,19 +220,14 @@ export default function CampaignTable({
                   {rows.map((c) => {
                     const margin = dealMargin(c);
                     const low = clientGross(c) > 0 && margin < MARGIN_FLOOR;
-                    const channels = [...new Set(c.campaign_lines.map((l) => l.channel))];
                     return (
-                      <tr key={c.id}>
-                        <td className="num ref">
-                          <Link href={`/campaigns/${c.id}`}>{c.ref}</Link>
-                        </td>
+                      <tr key={c.id} onClick={() => setDetail(c)} style={{ cursor: "pointer" }}>
+                        <td className="num ref">{c.ref}</td>
                         <td>
-                          <Link href={`/campaigns/${c.id}`}>
-                            <div className="strong">{c.name}</div>
-                            <div className="sub-line">{c.clients?.name ?? "—"}</div>
-                          </Link>
+                          <div className="strong">{c.name}</div>
+                          <div className="sub-line">{c.clients?.name ?? "—"}</div>
                         </td>
-                        <td className="sub-line">{channels.map(channelLabel).join(", ")}</td>
+                        <td>{channelChips(c)}</td>
                         <td className="num" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
                           {dateGB(c.start_date)}
                           <br />
@@ -217,7 +253,10 @@ export default function CampaignTable({
                             className="row-edit"
                             title={`Edit ${c.name}`}
                             aria-label={`Edit ${c.name}`}
-                            onClick={() => openEdit(c)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEdit(c);
+                            }}
                           >
                             <svg viewBox="0 0 24 24">
                               <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
@@ -230,9 +269,71 @@ export default function CampaignTable({
                 </tbody>
               </table>
             </div>
-          )}
+          </div>
+        </section>
+      ) : (
+        <div className="board">
+          {BOARD_COLUMNS.map((col) => {
+            const set = rows.filter((c) =>
+              col.key === "live" ? c.status === "live" || c.status === "risk" : c.status === col.key
+            );
+            const value = set.reduce((a, c) => a + clientGross(c), 0);
+            return (
+              <div className="col" key={col.key}>
+                <div className="col-head">
+                  <span className="stripe" style={{ background: col.stripe }} />
+                  <h3>{col.label}</h3>
+                  <span className="count">
+                    {set.length} · {gbpK(value)}
+                  </span>
+                </div>
+                {set.length === 0 ? (
+                  <p className="empty-note" style={{ padding: "12px 4px" }}>
+                    Nothing here
+                  </p>
+                ) : (
+                  set.map((c) => (
+                    <div className="tile" key={c.id} onClick={() => setDetail(c)} style={{ cursor: "pointer" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                        <div className="strong" style={{ flex: 1, minWidth: 0 }}>
+                          {c.name}
+                        </div>
+                        <button
+                          className="row-edit"
+                          aria-label={`Edit ${c.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(c);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24">
+                            <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="sub-line">{c.clients?.name ?? "—"}</div>
+                      <div style={{ marginTop: 8 }}>{channelChips(c)}</div>
+                      <div className="tile-foot">
+                        <span className="num strong">{gbp(clientGross(c))}</span>
+                        <span className="num" style={{ color: "var(--ok)", fontSize: 11.5 }}>
+                          +{gbpK(dealProfit(c))}
+                        </span>
+                        <span className="ref num" style={{ marginLeft: "auto" }}>
+                          {c.status === "risk" ? (
+                            <span className="st risk">At risk</span>
+                          ) : (
+                            c.ref
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            );
+          })}
         </div>
-      </section>
+      )}
 
       {rows.length > 0 && (
         <p className="sub-line" style={{ margin: "10px 2px" }}>
@@ -241,19 +342,235 @@ export default function CampaignTable({
         </p>
       )}
 
+      {/* Campaign detail */}
       <Drawer
-        open={drawer.open}
-        eyebrow={drawer.editing ? "Edit campaign" : "New campaign"}
-        title={drawer.editing ? drawer.editing.name : "Book a campaign"}
-        onClose={() => setDrawer({ open: false })}
+        open={!!detail}
+        eyebrow={detail ? `${detail.ref} · ${detail.clients?.name ?? "—"}` : ""}
+        title={detail?.name ?? ""}
+        onClose={() => setDetail(null)}
+      >
+        {detail && <CampaignDetail c={detail} onEdit={() => { const d = detail; setDetail(null); openEdit(d); }} />}
+      </Drawer>
+
+      {/* Book / edit */}
+      <Drawer
+        open={editor.open}
+        eyebrow={editor.editing ? "Edit campaign" : "New campaign"}
+        title={editor.editing ? editor.editing.name : "Book a campaign"}
+        onClose={() => setEditor({ open: false })}
       >
         <BookingForm
           clients={clients}
           staff={staffList}
-          editing={drawer.editing}
-          onDone={() => setDrawer({ open: false })}
+          editing={editor.editing}
+          onDone={() => setEditor({ open: false })}
         />
       </Drawer>
     </>
+  );
+}
+
+function CampaignDetail({ c, onEdit }: { c: Campaign; onEdit: () => void }) {
+  const gross = clientGross(c);
+  const net = supplierNet(c);
+  const margin = dealMargin(c);
+  const billedPct = gross ? Math.round((Number(c.billed) / gross) * 100) : 0;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span className={`st ${c.status}`}>{STATUS_LABEL[c.status] ?? c.status}</span>
+        {[...new Set(c.campaign_lines.map((l) => l.channel))].map((ch) => (
+          <span className="chan" key={ch}>
+            <i style={{ background: CHANNEL_COLOUR[ch] }} />
+            {channelLabel(ch)}
+          </span>
+        ))}
+      </div>
+
+      <div className="totals-box">
+        <div className="totals-grid">
+          <div>
+            <div className="eyebrow">Invoice — client gross</div>
+            <div className="num total-value">{gbp(gross)}</div>
+          </div>
+          <div>
+            <div className="eyebrow">POs — supplier net</div>
+            <div className="num total-value" style={{ color: "var(--mid)" }}>
+              {gbp(net)}
+            </div>
+          </div>
+          <div>
+            <div className="eyebrow">Profit</div>
+            <div
+              className="num total-value"
+              style={{ color: margin < MARGIN_FLOOR ? "var(--crit)" : "var(--ok)" }}
+            >
+              {gbp(dealProfit(c))} <small style={{ fontSize: 11, color: "var(--faint)" }}>{margin.toFixed(1)}%</small>
+            </div>
+          </div>
+        </div>
+        <div className="totals-split">
+          <small className="sub-line">Profit split:</small>
+          <small className="num">Commission <b>{gbp(commissionOf(c))}</b></small>
+          <small className="num">Markup <b style={{ color: markupOf(c) > 0 ? "var(--pink)" : undefined }}>{gbp(markupOf(c))}</b></small>
+          {Number(c.fee) > 0 && <small className="num">Fee <b>{gbp(Number(c.fee))}</b></small>}
+        </div>
+        <div className="totals-split">
+          <small className="sub-line">Client invoice:</small>
+          <small className="num">Gross ex VAT <b>{gbp(gross)}</b></small>
+          <small className="num">+ VAT 20% <b>{gbp(vatOn(gross))}</b></small>
+          <small className="num">Total <b style={{ color: "var(--blue)" }}>{gbp(gross + vatOn(gross))}</b></small>
+        </div>
+      </div>
+
+      {margin < MARGIN_FLOOR && gross > 0 && (
+        <div className="warn-box">
+          Margin {margin.toFixed(1)}% is below the {MARGIN_FLOOR}% floor — review the charges.
+        </div>
+      )}
+
+      <div>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>
+          Billed to client
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, height: 8, borderRadius: 99, background: "var(--surface-3)", overflow: "hidden" }}>
+            <div
+              style={{
+                width: `${Math.min(100, billedPct)}%`,
+                height: "100%",
+                background: "linear-gradient(90deg, var(--blue), var(--pink))",
+              }}
+            />
+          </div>
+          <span className="num strong">{billedPct}%</span>
+        </div>
+      </div>
+
+      <dl className="dl">
+        <dt>Flight</dt>
+        <dd className="num">{rangeGB(c.start_date, c.end_date)}</dd>
+        <dt>Region</dt>
+        <dd>{c.region}</dd>
+        <dt>Sales owner</dt>
+        <dd>{c.profiles?.full_name ?? "—"}</dd>
+        <dt>Leads to date</dt>
+        <dd className="num">{Number(c.leads) || "—"}</dd>
+        <dt>Cost per lead</dt>
+        <dd className="num">{Number(c.cpl) ? gbp(Number(c.cpl)) : "—"}</dd>
+      </dl>
+
+      <div>
+        <div className="eyebrow" style={{ marginBottom: 8 }}>
+          Booking lines · charge vs cost
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Channel</th>
+                <th>Supplier</th>
+                <th>Dates</th>
+                <th className="r">Charge</th>
+                <th className="r">Gross</th>
+                <th className="r">Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.campaign_lines.map((l) => (
+                <tr key={l.id}>
+                  <td>
+                    <span className="chan">
+                      <i style={{ background: CHANNEL_COLOUR[l.channel] }} />
+                      {channelLabel(l.channel)}
+                    </span>
+                    {l.ooh_format && (
+                      <div className="sub-line">
+                        {l.ooh_format} · {l.ooh_disp_type}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <div className="strong">{l.vendor}</div>
+                    <div className="sub-line">
+                      {l.detail}
+                      {l.cpt ? ` · CPT £${Number(l.cpt).toFixed(2)}` : ""}
+                    </div>
+                    <div className="sub-line">
+                      {l.copy_instruction ?? "New Copy"}
+                      {l.urn ? ` · ${l.urn}` : ""}
+                    </div>
+                  </td>
+                  <td className="num" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+                    {rangeGB(l.start_date, l.end_date)}
+                    {l.selected_dates && <div className="sub-line">{l.selected_dates}</div>}
+                  </td>
+                  <td className="r num strong">{gbp(Number(l.client_charge))}</td>
+                  <td className="r num" style={{ color: "var(--faint)" }}>
+                    {gbp(Number(l.supplier_gross))}
+                  </td>
+                  <td className="r num" style={{ color: "var(--mid)" }}>
+                    {gbp(Number(l.supplier_net))}
+                  </td>
+                </tr>
+              ))}
+              <tr>
+                <td colSpan={3} className="strong">
+                  Totals
+                </td>
+                <td className="r num strong">{gbp(gross)}</td>
+                <td className="r num" style={{ color: "var(--faint)" }}>
+                  {gbp(supplierGross(c))}
+                </td>
+                <td className="r num strong">{gbp(net)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn btn-primary" onClick={onEdit}>
+          Edit campaign
+        </button>
+      </div>
+
+      <style jsx>{`
+        .totals-box {
+          padding: 12px;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          background: var(--surface-2);
+        }
+        .totals-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 10px;
+        }
+        .total-value {
+          font-size: 17px;
+          font-weight: 700;
+          margin-top: 4px;
+        }
+        .totals-split {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-top: 10px;
+          padding-top: 10px;
+          border-top: 1px solid var(--line-soft);
+          color: var(--mid);
+        }
+        .warn-box {
+          padding: 10px 12px;
+          border: 1px solid var(--crit);
+          border-radius: 11px;
+          background: var(--crit-bg);
+          color: var(--crit);
+          font-size: 12.5px;
+        }
+      `}</style>
+    </div>
   );
 }

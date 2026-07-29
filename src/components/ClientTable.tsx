@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Segmented from "@/components/Segmented";
 import { gbp, MARGIN_FLOOR } from "@/lib/money";
 
 export type ClientRow = {
@@ -48,13 +49,6 @@ export default function ClientTable({ rows }: { rows: ClientRow[] }) {
             ))}
           </select>
         </label>
-        <label className="field">
-          <span>View</span>
-          <select className="input" value={view} onChange={(e) => setView(e.target.value as "cards" | "table")}>
-            <option value="cards">Cards</option>
-            <option value="table">Table</option>
-          </select>
-        </label>
         <button
           className="btn"
           onClick={() => {
@@ -64,6 +58,16 @@ export default function ClientTable({ rows }: { rows: ClientRow[] }) {
         >
           Clear
         </button>
+        <div style={{ marginLeft: "auto" }}>
+          <Segmented
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "cards", label: "Cards" },
+              { value: "table", label: "Table" },
+            ]}
+          />
+        </div>
       </div>
 
       {filtered.length === 0 ? (
