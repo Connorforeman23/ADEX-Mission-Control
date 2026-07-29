@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { supabaseUrl, supabaseAnonKey } from "@/lib/supabase/client";
 
 // Refreshes the Supabase auth session on every request and keeps
 // unauthenticated visitors out of the app (they get /login instead).
@@ -7,8 +8,8 @@ export default async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim().replace(/[^\x20-\x7E]/g, ""),
-    (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim().replace(/[^\x20-\x7E]/g, ""),
+    supabaseUrl(),
+    supabaseAnonKey(),
     {
       cookies: {
         getAll() {
