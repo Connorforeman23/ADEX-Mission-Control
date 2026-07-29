@@ -23,6 +23,13 @@ export type CampaignLine = {
   supplier_gross: number;
   supplier_net: number;
   client_charge: number;
+  // Present on the detail view, omitted from list queries.
+  selected_dates?: string | null;
+  cpt?: number | null;
+  ooh_format?: string | null;
+  ooh_disp_type?: string | null;
+  copy_instruction?: string;
+  urn?: string | null;
 };
 
 export type Campaign = {

@@ -1,5 +1,26 @@
-import ComingSoon from "@/components/ComingSoon";
+import Link from "next/link";
+import { getCampaigns } from "@/lib/queries";
+import CampaignTable from "@/components/CampaignTable";
 
-export default function Page() {
-  return <ComingSoon title="Campaigns" module="Module 3" blurb="Booking form with client charge and supplier cost per line, fixed dates, CPT, OOH formats and copy instructions." />;
+export const dynamic = "force-dynamic";
+
+export default async function CampaignsPage() {
+  const campaigns = await getCampaigns();
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <div className="eyebrow">Delivery</div>
+          <h1>Campaigns</h1>
+          <p>Every brief from planning through to reconciliation. Click a row for the full breakdown.</p>
+        </div>
+        <Link href="/campaigns/new" className="btn btn-primary">
+          New campaign
+        </Link>
+      </div>
+
+      <CampaignTable campaigns={campaigns} />
+    </div>
+  );
 }

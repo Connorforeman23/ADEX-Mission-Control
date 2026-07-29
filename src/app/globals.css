@@ -251,3 +251,14 @@ td.r, th.r { text-align: right; }
 }
 .flag.crit { color: var(--crit); background: var(--crit-bg); }
 .flag.warn { color: var(--warn); background: var(--warn-bg); }
+
+/* ---- forms ---- */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > span {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--faint);
+}
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 11px; }
+.form-grid .wide { grid-column: 1 / -1; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; }
+.filters .field { min-width: 170px; }
