@@ -144,6 +144,7 @@ export async function createCampaign(input: CampaignInput) {
       copy_instruction: l.copy_instruction,
       urn: l.copy_instruction === "URN" ? l.urn.trim() || null : null,
       supplier_gross: money(l.supplier_gross),
+      commission_pct: l.channel === "Creative" ? 0 : 15,
       client_charge: money(l.client_charge) || money(l.supplier_gross),
     });
     if (error) {
@@ -220,6 +221,7 @@ function lineRow(l: LineInput) {
     copy_instruction: l.copy_instruction,
     urn: l.copy_instruction === "URN" ? l.urn.trim() || null : null,
     supplier_gross: money(l.supplier_gross),
+    commission_pct: l.channel === "Creative" ? 0 : 15,
     client_charge: money(l.client_charge) || money(l.supplier_gross),
   };
 }
