@@ -33,7 +33,7 @@ select * from (
   union all
   select 'AE-2602', 'FTWM Full Pages — Jul/Aug',    client_id, 'live',   owner_id, 'National', date '2026-07-04', date '2026-08-29', 0, '232683', 'RAN0093 — 9 Saturday insertions. July invoiced on 18788; August to follow (Lynsey adds to monthly invoices).' from me
   union all
-  select 'AE-2603', 'M4 Tower — 6 month package',   client_id, 'booked', owner_id, 'London',   date '2026-09-07', date '2027-04-04', 0, null,     'RAN0094 bursts + RAN0097 extra creative. Client rate to confirm before invoicing.' from me
+  select 'AE-2603', 'M4 Tower — 6 month package',   client_id, 'booked', owner_id, 'London',   date '2026-09-07', date '2027-04-04', 0, null,     'RAN0094 bursts + RAN0097 extra creative. Client rate £6,000 per month, confirmed 29 Jul.' from me
   union all
   select 'AE-2604', 'Daily Telegraph — 01 Jul',     client_id, 'done',   owner_id, 'National', date '2026-07-01', date '2026-07-01', 0, '233004', 'RAN0095. Invoiced on 18789. (Supplier PO shows 01.07.25 — a typo for 2026.)' from me
   union all
@@ -64,12 +64,12 @@ select * from (
   union all select (select id from c where ref='AE-2602'), 'RAN0093','Print', 'FT', 'FTWM Full Page RH ROM ×5 (August)', date '2026-08-01', date '2026-08-29', 'Saturdays 01, 08, 15, 22, 29 Aug', 'Repeat Copy', 16380.00, 15, 17500.00
 
   -- AE-2603 M4 Tower (RAN0094 JCDecaux bursts + RAN0097 creative) — client charge = gross until rate confirmed
-  union all select (select id from c where ref='AE-2603'), 'RAN0094',  'OOH', 'JCD', 'M4 Tower Outbound — burst 1', date '2026-09-07', date '2026-10-04', null, 'New Copy', 4600.00, 15, 4600.00
-  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 2', date '2026-10-19', date '2026-11-15', null, 'Repeat Copy', 5000.00, 15, 5000.00
-  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 3', date '2026-11-30', date '2026-12-27', null, 'Repeat Copy', 5000.00, 15, 5000.00
-  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 4', date '2026-12-28', date '2027-01-24', null, 'Repeat Copy', 5000.00, 15, 5000.00
-  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 5', date '2027-01-25', date '2027-02-21', null, 'Repeat Copy', 5000.00, 15, 5000.00
-  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 6', date '2027-02-22', date '2027-04-04', null, 'Repeat Copy', 5000.00, 15, 5000.00
+  union all select (select id from c where ref='AE-2603'), 'RAN0094',  'OOH', 'JCD', 'M4 Tower Outbound — burst 1', date '2026-09-07', date '2026-10-04', null, 'New Copy', 4600.00, 15, 6000.00
+  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 2', date '2026-10-19', date '2026-11-15', null, 'Repeat Copy', 5000.00, 15, 6000.00
+  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 3', date '2026-11-30', date '2026-12-27', null, 'Repeat Copy', 5000.00, 15, 6000.00
+  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 4', date '2026-12-28', date '2027-01-24', null, 'Repeat Copy', 5000.00, 15, 6000.00
+  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 5', date '2027-01-25', date '2027-02-21', null, 'Repeat Copy', 5000.00, 15, 6000.00
+  union all select (select id from c where ref='AE-2603'), 'RAN0094', 'OOH', 'JCD', 'M4 Tower Outbound — burst 6', date '2027-02-22', date '2027-04-04', null, 'Repeat Copy', 5000.00, 15, 6000.00
   union all select (select id from c where ref='AE-2603'), 'RAN0094', 'Creative', 'JCD', 'Production ×2',           date '2026-09-07', date '2026-09-07', null, 'New Copy', 800.00, 0, 800.00
   union all select (select id from c where ref='AE-2603'), 'RAN0097',  'Creative', 'JCD', 'Extra creative — production', date '2026-07-13', date '2026-07-13', null, 'New Copy', 400.00, 0, 400.00
 
