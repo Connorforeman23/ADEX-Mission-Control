@@ -343,6 +343,58 @@ export async function deleteLead(id: string) {
   return {};
 }
 
+// --- creative -----------------------------------------------------------
+
+export type CreativeInput = {
+  id?: string;
+  item: string;
+  clientId: string;
+  format: string;
+  spec: string;
+  dueDate: string;
+  stage: string;
+  ownerId: string;
+};
+
+export async function saveCreativeItem(input: CreativeInput) {
+  const supabase = await createClient();
+  if (!input.item.trim()) return { error: "Give the item a name." };
+
+  const row = {
+    item: input.item.trim(),
+    client_id: input.clientId || null,
+    format: input.format.trim() || null,
+    spec: input.spec.trim() || null,
+    due_date: input.dueDate || null,
+    stage: input.stage,
+    owner_id: input.ownerId || null,
+  };
+
+  const { error } = input.id
+    ? await supabase.from("creative_items").update(row).eq("id", input.id)
+    : await supabase.from("creative_items").insert(row);
+
+  if (error) return { error: error.message };
+  revalidatePath("/creative");
+  return {};
+}
+
+export async function moveCreativeStage(id: string, stage: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("creative_items").update({ stage }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/creative");
+  return {};
+}
+
+export async function deleteCreativeItem(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("creative_items").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/creative");
+  return {};
+}
+
 export async function updateCampaignStatus(id: string, status: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("campaigns").update({ status }).eq("id", id);

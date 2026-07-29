@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { initials } from "@/lib/money";
@@ -45,14 +45,16 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [dark, setDark] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("adex-theme");
-    const isDark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setDark(isDark);
-  }, []);
+  // The inline script in the document head has already applied the saved
+  // theme, so read the result rather than duplicating that logic here.
+  const [dark, setDark] = useState(() => {
+    if (typeof document === "undefined") return true;
+    const stamped = document.documentElement.getAttribute("data-theme");
+    if (stamped) return stamped === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
 
   function toggleTheme() {
     const next = dark ? "light" : "dark";

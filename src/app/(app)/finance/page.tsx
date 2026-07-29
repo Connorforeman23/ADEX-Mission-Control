@@ -176,7 +176,11 @@ export default async function FinancePage() {
         </section>
       </div>
 
-      <PoTable orders={orders} invoices={invoices} />
+      <PoTable
+        orders={orders}
+        invoices={invoices}
+        today={new Date().toISOString().slice(0, 10)}
+      />
     </div>
   );
 }

@@ -28,9 +28,12 @@ function ReconChip({ recon }: { recon: Recon }) {
 export default function PoTable({
   orders,
   invoices,
+  today,
 }: {
   orders: PurchaseOrder[];
   invoices: SupplierInvoice[];
+  /** Order date, passed from the server so both renders agree. */
+  today: string;
 }) {
   const router = useRouter();
   const invoiceMap = new Map(invoices.map((i) => [i.campaign_line_id, i]));
@@ -150,7 +153,7 @@ export default function PoTable({
               <dt>From</dt>
               <dd>{open.owner}</dd>
               <dt>Date</dt>
-              <dd className="num">{dateGB(new Date().toISOString().slice(0, 10))}</dd>
+              <dd className="num">{dateGB(today)}</dd>
               <dt>Client</dt>
               <dd>{open.client}</dd>
               <dt>Order number</dt>

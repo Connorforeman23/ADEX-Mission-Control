@@ -9,7 +9,6 @@ import {
   dealProfit,
   gbp,
   gbpK,
-  initials,
   MARGIN_FLOOR,
   STATUS_LABEL,
   supplierNet,
