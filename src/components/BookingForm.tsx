@@ -11,7 +11,7 @@ import {
   REGIONS,
   SUPPLIERS_BY_CHANNEL,
 } from "@/lib/reference";
-import { CHANNELS, CHANNEL_COLOUR, channelLabel, gbp, VAT_RATE } from "@/lib/money";
+import { CHANNELS, CHANNEL_COLOUR, channelLabel, gbp, rangeGB, VAT_RATE } from "@/lib/money";
 
 const blankLine = (): LineInput => ({
   channel: "Digital",
@@ -298,6 +298,7 @@ export default function BookingForm({
                 <span className="chan">
                   <i style={{ background: CHANNEL_COLOUR[l.channel] }} />
                   {channelLabel(l.channel)} · net {gbp(netOf(l))}
+                  {l.start_date && l.end_date ? ` · ${rangeGB(l.start_date, l.end_date)}` : ""}
                 </span>
                 {lines.length > 1 && (
                   <button type="button" className="btn" onClick={() => setLines((p) => p.filter((_, idx) => idx !== i))}>

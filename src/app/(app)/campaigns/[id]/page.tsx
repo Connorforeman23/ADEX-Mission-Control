@@ -6,6 +6,8 @@ import {
   CHANNEL_COLOUR,
   clientGross,
   commissionOf,
+  dateGB,
+  rangeGB,
   dealMargin,
   dealProfit,
   gbp,
@@ -56,6 +58,10 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           <h1>{c.name}</h1>
           <p>
             {c.clients?.name ?? "—"} · {c.region} · owned by {c.profiles?.full_name ?? "unassigned"}
+            <br />
+            <span className="num" style={{ fontSize: 12 }}>
+              {rangeGB(c.start_date, c.end_date)}
+            </span>
           </p>
         </div>
         <span className={`st ${c.status}`}>{STATUS_LABEL[c.status] ?? c.status}</span>
@@ -158,9 +164,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                       </div>
                     </td>
                     <td className="num" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-                      {l.start_date}
-                      <br />
-                      <span style={{ color: "var(--faint)" }}>{l.end_date}</span>
+                      {rangeGB(l.start_date, l.end_date)}
                       {l.selected_dates && <div className="sub-line">{l.selected_dates}</div>}
                     </td>
                     <td className="sub-line">

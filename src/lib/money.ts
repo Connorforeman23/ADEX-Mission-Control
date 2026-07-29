@@ -83,6 +83,35 @@ export const gbp = (n: number) => "£" + Math.round(n).toLocaleString("en-GB");
 export const gbpK = (n: number) =>
   n >= 1000 ? "£" + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : "£" + Math.round(n);
 
+// --- dates -------------------------------------------------------------
+// Postgres hands back ISO (2026-08-03); everything shown to the team is
+// British. Sorting still uses the raw ISO value, never these strings.
+
+/** 03 Aug 2026 */
+export const dateGB = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+/** 03 Aug (no year, for compact ranges) */
+export const dateShortGB = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+};
+
+/** 03 Aug – 30 Aug 2026, dropping the repeated year */
+export const rangeGB = (from: string | null | undefined, to: string | null | undefined) => {
+  if (!from && !to) return "—";
+  if (!to) return dateGB(from);
+  if (!from) return dateGB(to);
+  const sameYear = from.slice(0, 4) === to.slice(0, 4);
+  return `${sameYear ? dateShortGB(from) : dateGB(from)} – ${dateGB(to)}`;
+};
+
 export const CHANNELS = ["Digital", "TV", "Radio", "OOH", "Print", "Creative"] as const;
 
 export const CHANNEL_COLOUR: Record<string, string> = {

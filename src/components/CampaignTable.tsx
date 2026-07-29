@@ -6,6 +6,7 @@ import {
   CHANNELS,
   channelLabel,
   clientGross,
+  dateGB,
   dealMargin,
   dealProfit,
   gbp,
@@ -192,9 +193,9 @@ export default function CampaignTable({
                         </td>
                         <td className="sub-line">{channels.map(channelLabel).join(", ")}</td>
                         <td className="num" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-                          {c.start_date ?? "—"}
+                          {dateGB(c.start_date)}
                           <br />
-                          <span style={{ color: "var(--faint)" }}>{c.end_date ?? ""}</span>
+                          <span style={{ color: "var(--faint)" }}>{dateGB(c.end_date)}</span>
                         </td>
                         <td className="r num">{gbp(clientGross(c))}</td>
                         <td className="r num" style={{ color: "var(--mid)" }}>
