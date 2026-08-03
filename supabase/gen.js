@@ -33,10 +33,11 @@ const VENDOR = {
   Treacle7: "Treacle7", "Ocean OOH": "Ocean OOH",
 };
 
-const channelOf = (po, label, vendor, isProd) => {
-  if (isProd || /production/i.test(label)) return "Creative";
+// Production keeps the channel of the media it belongs to — printing a poster
+// is an OOH cost, not a creative job. Only genuine artwork/asset work is Creative.
+const channelOf = (po, label, vendor) => {
   if (po === "0080") return "Radio";
-  if (po === "0081") return "Creative";
+  if (po === "0081") return "Creative"; // Treacle7 — producing the radio ad itself
   if (["FT", "Irish Times", "MMM", "Mail Metro Media"].includes(vendor)) return "Print";
   return "OOH";
 };
@@ -66,9 +67,10 @@ for (const [ref, name, region, pos] of GROUPS) {
       if (/^Total\b|Campaign Length|Agency Commission|Order Number|Space Order/i.test(l.label)) continue;
       if (/^(Gross|Media|Total) (Media|Net|Campaign|Production)/i.test(l.label)) continue;
       const isProd = l.isProduction;
-      const channel = channelOf(po, l.label, vendorRaw, isProd);
+      const channel = channelOf(po, l.label, vendorRaw);
       // Production is billed at cost — no commission.
       const commission = isProd ? 0 : doc.commission;
+      const lineType = isProd ? "production" : "media";
       // Irish Times bills in euros; the invoice run shows £7,327.38 per
       // insertion, so store that GBP equivalent to keep one currency.
       let gross = l.gross;
@@ -77,7 +79,7 @@ for (const [ref, name, region, pos] of GROUPS) {
         ref, name, region, po: `RAN${po}`, channel, vendor,
         contact: doc.to, detail: l.label || vendor,
         start: fixDate(l.dates[0] ?? null), end: fixDate(l.dates[1] ?? l.dates[0] ?? null),
-        gross, commission, copy: doc.copy,
+        gross, commission, copy: doc.copy, lineType,
       });
     }
   }
@@ -104,6 +106,8 @@ out.push(`-- ADEX Mission Control — Randox Health import (RAN0078–RAN0101)
 
 alter table campaign_lines add column if not exists commission_pct numeric(5,2) not null default 15;
 alter table campaign_lines add column if not exists supplier_contact text;
+alter table campaign_lines add column if not exists line_type text not null default 'media'
+  check (line_type in ('media','production'));
 alter table campaign_lines drop column if exists supplier_net;
 alter table campaign_lines add column supplier_net numeric(12,2)
   generated always as (round(supplier_gross * (1 - commission_pct / 100.0), 2)) stored;
@@ -120,11 +124,17 @@ out.push([...camps.values()].map((c, i) =>
   `${i ? "union all " : "select * from (\n  "}select '${c.ref}', '${esc(c.name)}', (select id from clients where name='Randox Health'), '${c.status}', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), '${esc(c.region)}', ${sqlDate(c.start)}, ${sqlDate(c.end)}, 0, '${[...c.pos].join(" + ")}'`
 ).join("\n  ") + "\n) v\non conflict (ref) do nothing;");
 
-out.push(`\n-- booking lines\ninsert into campaign_lines (campaign_id, supplier_po, supplier_contact, channel, vendor, detail, start_date, end_date, copy_instruction, supplier_gross, commission_pct, client_charge)\nselect * from (`);
+out.push(`
+-- Clear any earlier Randox import so this one is the single source of truth.
+-- The first attempt created AE-2601..AE-2607, now superseded by AE-2590..AE-2596.
+delete from campaigns where ref between 'AE-2601' and 'AE-2607';
+delete from campaign_lines where supplier_po like 'RAN%';`);
+
+out.push(`\n-- booking lines\ninsert into campaign_lines (campaign_id, supplier_po, supplier_contact, line_type, channel, vendor, detail, start_date, end_date, copy_instruction, supplier_gross, commission_pct, client_charge)\nselect * from (`);
 out.push(rows.map((r, i) =>
-  `  ${i ? "union all " : ""}select (select id from campaigns where ref='${r.ref}'), '${r.po}', '${esc(r.contact)}', '${r.channel}', '${esc(r.vendor)}', '${esc(r.detail)}', ${sqlDate(r.start)}, ${sqlDate(r.end)}, '${r.copy}', ${r.gross}, ${r.commission}, ${r.gross}`
+  `  ${i ? "union all " : ""}select (select id from campaigns where ref='${r.ref}'), '${r.po}', '${esc(r.contact)}', '${r.lineType}', '${r.channel}', '${esc(r.vendor)}', '${esc(r.detail)}', ${sqlDate(r.start)}, ${sqlDate(r.end)}, '${r.copy}', ${r.gross}, ${r.commission}, ${r.gross}`
 ).join("\n"));
-out.push(`) v\nwhere not exists (select 1 from campaign_lines cl where cl.supplier_po like 'RAN%');`);
+out.push(`) v;`);
 
 // ---- client invoices from the Sage activity report ----------------------
 const invoices = JSON.parse(fs.readFileSync("invoices.json", "utf8"));
@@ -144,6 +154,11 @@ const campOf = (inv) => {
   return null;
 };
 out.push(`\n-- client invoices (Sage), with payment status
+-- The Sage report distinguishes paid from unpaid, which the original
+-- constraint did not allow.
+alter table client_invoices drop constraint if exists client_invoices_status_check;
+alter table client_invoices add constraint client_invoices_status_check
+  check (status in ('Draft','Sent','Paid','Unpaid','Overdue','Cancelled'));
 alter table client_invoices add column if not exists client_id uuid references clients(id) on delete cascade;
 alter table client_invoices add column if not exists outstanding numeric(12,2) not null default 0;
 alter table client_invoices alter column campaign_id drop not null;
