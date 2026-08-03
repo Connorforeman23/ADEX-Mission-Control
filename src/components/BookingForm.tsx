@@ -14,6 +14,7 @@ import {
 import { CHANNELS, CHANNEL_COLOUR, channelLabel, gbp, rangeGB, VAT_RATE } from "@/lib/money";
 
 const blankLine = (): LineInput => ({
+  line_type: "media",
   channel: "Digital",
   vendor: SUPPLIERS_BY_CHANNEL.Digital[0],
   detail: "",
@@ -34,9 +35,10 @@ const num = (v: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// Supplier net is gross less 15%, except Creative which is billed at cost.
+// Supplier net is gross less 15% commission. Production — printing posters,
+// pressing audio — is billed at cost and carries none.
 const netOf = (l: LineInput) =>
-  l.channel === "Creative" ? num(l.supplier_gross) : Math.round(num(l.supplier_gross) * 0.85);
+  l.line_type === "production" ? num(l.supplier_gross) : Math.round(num(l.supplier_gross) * 0.85);
 
 export type EditingCampaign = {
   id: string;
@@ -220,6 +222,19 @@ export default function BookingForm({
           {lines.map((l, i) => (
             <div key={i} className="line-card">
               <div className="form-grid">
+                <label className="field">
+                  <span>Line type</span>
+                  <select
+                    className="input"
+                    value={l.line_type}
+                    onChange={(e) =>
+                      updateLine(i, { line_type: e.target.value as "media" | "production" })
+                    }
+                  >
+                    <option value="media">Media</option>
+                    <option value="production">Production (no commission)</option>
+                  </select>
+                </label>
                 <label className="field">
                   <span>Channel</span>
                   <select className="input" value={l.channel} onChange={(e) => updateLine(i, { channel: e.target.value })}>

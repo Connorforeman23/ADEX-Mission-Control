@@ -105,6 +105,7 @@ export default function CampaignTable({
       clientPo: c.client_po ?? "",
       lines: c.campaign_lines.map((l) => ({
         id: l.id,
+        line_type: l.line_type ?? "media",
         channel: l.channel,
         vendor: l.vendor,
         detail: l.detail ?? "",
@@ -579,6 +580,9 @@ function CampaignDetail({
                       <i style={{ background: CHANNEL_COLOUR[l.channel] }} />
                       {channelLabel(l.channel)}
                     </span>
+                    {l.line_type === "production" && (
+                      <div className="sub-line">Production — no commission</div>
+                    )}
                     {l.ooh_format && (
                       <div className="sub-line">
                         {l.ooh_format} · {l.ooh_disp_type}

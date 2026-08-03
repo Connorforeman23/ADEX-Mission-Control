@@ -15,12 +15,21 @@ export const SUPPLIERS_BY_CHANNEL: Record<string, string[]> = {
     "JCD", "Bauer Media", "Global OOH", "Ocean OOH", "KBH Media", "T4 Media",
     "AdFrame", "Konncected+", "CScreens", "GPM360",
   ],
-  // Production is usually billed by whoever carries the media, so the media
-  // owners we actually receive production charges from belong here too.
-  Creative: [
-    "Studio", "Treacle7", "JCD", "Global OOH", "KBH Media", "Ocean OOH", "MMM", "FT",
-  ],
+  // Creative is artwork and asset production — studios and producers, not
+  // media owners. Printing a poster is a production cost on the OOH line
+  // itself, not a creative job.
+  Creative: ["Studio", "Treacle7"],
 };
+
+/**
+ * Media buys the space; production is the physical cost of making the thing
+ * that goes in it — printing posters, pressing audio. Production carries no
+ * commission and stays on its media channel rather than becoming Creative.
+ */
+export const LINE_TYPES = [
+  { value: "media", label: "Media" },
+  { value: "production", label: "Production" },
+] as const;
 
 export const REGIONS = [
   "National", "London", "Meridian", "Anglia", "Central", "Granada", "Yorkshire",

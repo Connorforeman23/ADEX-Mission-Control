@@ -22,6 +22,8 @@ export type CampaignLine = {
   end_date: string;
   supplier_gross: number;
   supplier_net: number;
+  /** Media buys the space; production is the physical cost of the poster or audio. */
+  line_type?: "media" | "production";
   client_charge: number;
   // Present on the detail view, omitted from list queries.
   selected_dates?: string | null;
@@ -68,6 +70,22 @@ export const dealMargin = (c: Campaign) => {
   const gross = clientGross(c);
   return gross ? (dealProfit(c) / gross) * 100 : 0;
 };
+
+/** Media spend only — production (printing, audio) isn't media buying. */
+export const mediaSpend = (c: Campaign) =>
+  sum(
+    c.campaign_lines
+      .filter((l) => l.line_type !== "production")
+      .map((l) => Number(l.client_charge))
+  );
+
+/** What the production side of a campaign costs. */
+export const productionSpend = (c: Campaign) =>
+  sum(
+    c.campaign_lines
+      .filter((l) => l.line_type === "production")
+      .map((l) => Number(l.client_charge))
+  );
 
 /** The 15% commission element of profit, separate from any markup. */
 export const commissionOf = (c: Campaign) => supplierGross(c) - supplierNet(c);

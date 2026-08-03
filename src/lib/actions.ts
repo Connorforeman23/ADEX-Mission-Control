@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type LineInput = {
   id?: string;
+  line_type: "media" | "production";
   channel: string;
   vendor: string;
   detail: string;
@@ -133,6 +134,7 @@ export async function createCampaign(input: CampaignInput) {
       campaign_id: campaign.id,
       supplier_po: supplierPo,
       channel: l.channel,
+      line_type: l.line_type,
       vendor: l.vendor.trim(),
       detail: l.detail.trim() || null,
       start_date: l.start_date,
@@ -144,7 +146,7 @@ export async function createCampaign(input: CampaignInput) {
       copy_instruction: l.copy_instruction,
       urn: l.copy_instruction === "URN" ? l.urn.trim() || null : null,
       supplier_gross: money(l.supplier_gross),
-      commission_pct: l.channel === "Creative" ? 0 : 15,
+      commission_pct: l.line_type === "production" ? 0 : 15,
       client_charge: money(l.client_charge) || money(l.supplier_gross),
     });
     if (error) {
@@ -210,6 +212,7 @@ export async function createCampaign(input: CampaignInput) {
 function lineRow(l: LineInput) {
   return {
     channel: l.channel,
+    line_type: l.line_type,
     vendor: l.vendor.trim(),
     detail: l.detail.trim() || null,
     start_date: l.start_date,
@@ -221,7 +224,7 @@ function lineRow(l: LineInput) {
     copy_instruction: l.copy_instruction,
     urn: l.copy_instruction === "URN" ? l.urn.trim() || null : null,
     supplier_gross: money(l.supplier_gross),
-    commission_pct: l.channel === "Creative" ? 0 : 15,
+    commission_pct: l.line_type === "production" ? 0 : 15,
     client_charge: money(l.client_charge) || money(l.supplier_gross),
   };
 }
