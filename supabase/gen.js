@@ -130,11 +130,19 @@ out.push(`
 delete from campaigns where ref between 'AE-2601' and 'AE-2607';
 delete from campaign_lines where supplier_po like 'RAN%';`);
 
-out.push(`\n-- booking lines\ninsert into campaign_lines (campaign_id, supplier_po, supplier_contact, line_type, channel, vendor, detail, start_date, end_date, copy_instruction, supplier_gross, commission_pct, client_charge)\nselect * from (`);
-out.push(rows.map((r, i) =>
-  `  ${i ? "union all " : ""}select (select id from campaigns where ref='${r.ref}'), '${r.po}', '${esc(r.contact)}', '${r.lineType}', '${r.channel}', '${esc(r.vendor)}', '${esc(r.detail)}', ${sqlDate(r.start)}, ${sqlDate(r.end)}, '${r.copy}', ${r.gross}, ${r.commission}, ${r.gross}`
-).join("\n"));
-out.push(`) v;`);
+// Emit the booking lines as several smaller statements — one enormous
+// insert is what makes the paste fail in the SQL editor.
+const CHUNK = 25;
+for (let start = 0; start < rows.length; start += CHUNK) {
+  const chunk = rows.slice(start, start + CHUNK);
+  out.push(`\n-- booking lines ${start + 1}-${start + chunk.length} of ${rows.length}
+insert into campaign_lines (campaign_id, supplier_po, supplier_contact, line_type, channel, vendor, detail, start_date, end_date, copy_instruction, supplier_gross, commission_pct, client_charge)
+select * from (`);
+  out.push(chunk.map((r, i) =>
+    `  ${i ? "union all " : ""}select (select id from campaigns where ref='${r.ref}'), '${r.po}', '${esc(r.contact)}', '${r.lineType}', '${r.channel}', '${esc(r.vendor)}', '${esc(r.detail)}', ${sqlDate(r.start)}, ${sqlDate(r.end)}, '${r.copy}', ${r.gross}, ${r.commission}, ${r.gross}`
+  ).join("\n"));
+  out.push(`) v;`);
+}
 
 // ---- client invoices from the Sage activity report ----------------------
 const invoices = JSON.parse(fs.readFileSync("invoices.json", "utf8"));
