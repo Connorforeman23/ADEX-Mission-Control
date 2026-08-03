@@ -44,7 +44,9 @@ function rowsOf(po) {
 const header = (po) => {
   const xml = fs.readFileSync(`${po}/word/document.xml`, "utf8");
   const flat = text(xml);
-  const company = (flat.match(/Company:\s*([^F]*?)\s*To:/) ?? [])[1]?.trim();
+  // Non-greedy to the next label — the old pattern excluded "F", so any
+  // supplier starting with one (FT) came back undefined.
+  const company = (flat.match(/Company:\s*(.*?)\s*To:/) ?? [])[1]?.trim();
   const to = (flat.match(/To:\s*(.*?)\s*From:/) ?? [])[1]?.trim();
   const from = (flat.match(/From:\s*(.*?)\s*Date:/) ?? [])[1]?.trim();
   const comm = (flat.match(/Agency Commission\s*(\d+)%/) ?? [])[1];
@@ -75,7 +77,8 @@ for (const po of POS) {
       gross: amounts[0] ?? null,
       net: amounts.length >= 3 ? amounts[1] : null,
       incVat: amounts[amounts.length - 1] ?? null,
-      isProduction: /production/i.test(label ?? ""),
+      // The word can sit in any cell of the row, not just the item label.
+      isProduction: /production/i.test(cells.join(" ")),
     });
   }
   result[po] = { ...h, lines };
