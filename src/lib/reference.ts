@@ -8,14 +8,18 @@ export const SUPPLIERS_BY_CHANNEL: Record<string, string[]> = {
   TV: ["ITV", "Sky", "C4", "C5", "UKTV", "Axiom", "Sabio", "Plug", "Media15", "LG", "Samsung", "GPM360"],
   Radio: ["Global", "Bauer", "News Broadcasting", "DAX (Global)", "Communicorp", "Fix Radio", "Boom Radio", "Gaydio"],
   Print: [
-    "Reach PLC", "News UK", "MMM", "Telegraph", "Guardian Group", "FT", "Newsquest",
-    "Future PLC", "Immediate Media", "Bauer Media",
+    "Reach PLC", "News UK", "MMM", "Telegraph", "Guardian Group", "FT", "Irish Times",
+    "Newsquest", "Future PLC", "Immediate Media", "Bauer Media",
   ],
   OOH: [
     "JCD", "Bauer Media", "Global OOH", "Ocean OOH", "KBH Media", "T4 Media",
     "AdFrame", "Konncected+", "CScreens", "GPM360",
   ],
-  Creative: ["Studio"],
+  // Production is usually billed by whoever carries the media, so the media
+  // owners we actually receive production charges from belong here too.
+  Creative: [
+    "Studio", "Treacle7", "JCD", "Global OOH", "KBH Media", "Ocean OOH", "MMM", "FT",
+  ],
 };
 
 export const REGIONS = [
