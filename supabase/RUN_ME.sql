@@ -253,6 +253,12 @@ select * from (
 where not exists (select 1 from campaign_lines cl where cl.supplier_po like 'RAN%');
 
 -- client invoices (Sage), with payment status
+-- The Sage report distinguishes paid from unpaid, which the original
+-- constraint did not allow.
+alter table client_invoices drop constraint if exists client_invoices_status_check;
+alter table client_invoices add constraint client_invoices_status_check
+  check (status in ('Draft','Sent','Paid','Unpaid','Overdue','Cancelled'));
+
 alter table client_invoices add column if not exists client_id uuid references clients(id) on delete cascade;
 alter table client_invoices add column if not exists outstanding numeric(12,2) not null default 0;
 alter table client_invoices alter column campaign_id drop not null;
