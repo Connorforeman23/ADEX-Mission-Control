@@ -1,4 +1,4 @@
--- ADEX Randox import - part 5 of 5
+-- ADEX Randox import - part 6 of 6
 -- Run the parts IN ORDER. Each is safe to re-run.
 
 -- booking lines 151-157 of 157
@@ -9,7 +9,7 @@ select * from (
   union all select (select id from campaigns where ref='AE-2595'), 'RAN0099', 'Patsy Ramsay', 'media', 'Print', 'MMM', 'Daily Mail', date '2026-07-07', date '2026-07-07', 'New Copy', 4000, 15, 4000
   union all select (select id from campaigns where ref='AE-2596'), 'RAN0100', 'Karima Dernawi', 'media', 'OOH', 'Global OOH', 'Global', date '2026-07-23', date '2026-08-02', 'New Copy', 5267.44, 15, 5267.44
   union all select (select id from campaigns where ref='AE-2596'), 'RAN0101', 'Karima Dernawi', 'media', 'OOH', 'Global OOH', 'Global', date '2026-07-20', date '2026-08-02', 'New Copy', 3500, 15, 3500
-  union all select (select id from campaigns where ref='AE-2596'), 'RAN0101', 'Karima Dernawi', 'production', 'OOH', 'Global OOH', 'Production on above', null, null, 'New Copy', 2400, 0, 2400
+  union all select (select id from campaigns where ref='AE-2596'), 'RAN0101', 'Karima Dernawi', 'production', 'OOH', 'Global OOH', 'Production on above', date '2026-07-20', date '2026-08-02', 'New Copy', 2400, 0, 2400
   union all select (select id from campaigns where ref='AE-2596'), 'RAN0101', 'Karima Dernawi', 'media', 'OOH', 'Global OOH', 'Global', date '2026-07-23', date '2026-08-02', 'New Copy', 858, 15, 858
 ) v;
 

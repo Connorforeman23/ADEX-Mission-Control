@@ -1,4 +1,4 @@
--- ADEX Randox import - part 1 of 5
+-- ADEX Randox import - part 1 of 6
 -- Run the parts IN ORDER. Each is safe to re-run.
 
 -- ADEX Mission Control  Randox Health import (RAN0078RAN0101)
@@ -39,7 +39,7 @@ select * from (
   union all select 'AE-2586', 'Liverpool D6s', (select id from clients where name='Randox Health'), 'done', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), 'Granada', date '2026-03-30', date '2026-04-12', 0, 'RAN0087'
   union all select 'AE-2587', 'FTWM  MarJun 26 (x7)', (select id from clients where name='Randox Health'), 'done', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), 'National', date '2026-03-28', date '2026-06-27', 0, 'RAN0088'
   union all select 'AE-2588', 'FTWM  Additional page 16 May', (select id from clients where name='Randox Health'), 'done', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), 'National', date '2026-05-16', date '2026-05-16', 0, 'RAN0089'
-  union all select 'AE-2589', 'Wimbledon Activation', (select id from clients where name='Randox Health'), 'planning', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), 'London', null, null, 0, 'RAN0090'
+  union all select 'AE-2589', 'Wimbledon Activation', (select id from clients where name='Randox Health'), 'done', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), 'London', date '2026-05-14', date '2026-05-14', 0, 'RAN0090'
   union all select 'AE-2590', 'Kingston OOH  Summer', (select id from clients where name='Randox Health'), 'live', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), 'London', date '2026-07-06', date '2026-08-23', 0, 'RAN0091 + RAN0092'
   union all select 'AE-2591', 'FTWM  Jul/Aug 26', (select id from clients where name='Randox Health'), 'live', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), 'National', date '2026-07-04', date '2026-08-29', 0, 'RAN0093'
   union all select 'AE-2592', 'M4 Tower  6 month package', (select id from clients where name='Randox Health'), 'live', (select id from profiles where lower(email)='connor.foreman@advertisingexcellence.co.uk'), 'London', date '2026-01-25', date '2027-01-24', 0, 'RAN0094 + RAN0097'

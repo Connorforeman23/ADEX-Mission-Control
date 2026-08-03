@@ -42,6 +42,17 @@ const channelOf = (po, label, vendor) => {
   return "OOH";
 };
 
+// The date each order was raised — the fallback when a line has no dates of
+// its own and nothing above it to inherit from.
+const ORDER_DATE = {
+  "0078": "2025-10-15", "0079": "2025-10-15", "0080": "2025-10-24", "0081": "2025-10-30",
+  "0082": "2025-11-25", "0083": "2026-01-12", "0084": "2026-01-16", "0085": "2026-01-27",
+  "0086": "2026-02-26", "0087": "2026-03-05", "0088": "2026-03-23", "0089": "2026-04-22",
+  "0090": "2026-05-14", "0091": "2026-06-09", "0092": "2026-06-17", "0093": "2026-06-09",
+  "0094": "2026-06-09", "0095": "2026-06-25", "0096": "2026-06-26", "0097": "2026-06-30",
+  "0098": "2026-07-03", "0099": "2026-07-06", "0100": "2026-07-08", "0101": "2026-07-09",
+};
+
 // Typos in the source orders, corrected on the way in.
 const DATE_FIX = {
   "2024-02-22": "2026-02-22", // RAN0078 burst 2 end — year typed as 2024
@@ -60,6 +71,9 @@ for (const [ref, name, region, pos] of GROUPS) {
     if (!doc) continue;
     const vendorRaw = (doc.company || "").trim();
     const vendor = VENDOR[vendorRaw] ?? vendorRaw;
+    // A production charge sits under the media row it belongs to and doesn't
+    // repeat its dates, so it inherits them from the line above.
+    let lastStart = null, lastEnd = null;
     for (const l of doc.lines) {
       if (l.gross == null || l.gross <= 0) continue;
       // Skip the order's own summary and metric rows — they aren't bookings.
@@ -75,10 +89,17 @@ for (const [ref, name, region, pos] of GROUPS) {
       // insertion, so store that GBP equivalent to keep one currency.
       let gross = l.gross;
       if (vendorRaw === "Irish Times") gross = 7327.38;
+      let start = fixDate(l.dates[0] ?? null);
+      let end = fixDate(l.dates[1] ?? l.dates[0] ?? null);
+      if (start) { lastStart = start; lastEnd = end ?? start; }
+      else { start = lastStart; end = lastEnd; }
+      // Nothing to inherit (the order's first row) — fall back to the order date.
+      if (!start) { start = ORDER_DATE[po] ?? "2026-01-01"; end = start; }
+
       rows.push({
         ref, name, region, po: `RAN${po}`, channel, vendor,
         contact: doc.to, detail: l.label || vendor,
-        start: fixDate(l.dates[0] ?? null), end: fixDate(l.dates[1] ?? l.dates[0] ?? null),
+        start, end,
         gross, commission, copy: doc.copy, lineType,
       });
     }
