@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import DevBanner from "@/components/DevBanner";
 
 // Wraps every signed-in page with the navigation shell. Auth pages live
 // outside this group so they render without it.
@@ -20,11 +19,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .single();
 
   return (
-    <>
-      <DevBanner />
-      <AppShell fullName={profile?.full_name ?? user.email ?? "User"} role={profile?.role ?? "standard"}>
-        {children}
-      </AppShell>
-    </>
+    <AppShell fullName={profile?.full_name ?? user.email ?? "User"} role={profile?.role ?? "standard"}>
+      {children}
+    </AppShell>
   );
 }
