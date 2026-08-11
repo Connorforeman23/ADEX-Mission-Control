@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { supabaseUrl, supabaseAnonKey } from "@/lib/supabase/client";
+import { supabaseUrl, supabaseAnonKey } from "@/lib/env";
 
 // Refreshes the Supabase auth session on every request and keeps
 // unauthenticated visitors out of the app (they get /login instead).

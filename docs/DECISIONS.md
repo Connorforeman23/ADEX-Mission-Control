@@ -89,14 +89,20 @@ reach production regardless of their variables.
 
 ---
 
-### D7 — Two Vercel projects rather than one
-**Date:** 29 July 2026 · **Status:** proposed, awaiting confirmation
+### D7 — One Vercel project with a runtime environment guard
+**Date:** 29 July 2026 · **Superseded the earlier two-project proposal**
 
-Production and development as separate Vercel projects rather than one project
-using environment scoping.
+One Vercel project with per-environment variables (Production scope → prod
+values; Preview + Development scope → dev values), backed by a runtime guard
+(`src/lib/env.ts`) that refuses to start on any environment/project mismatch.
 
-**Why:** we have already had exactly the failure that one project invites — on
-29 July the anon key was scoped so it never reached Production, the build passed,
-and sign-in broke. Separate projects make it structurally impossible for
-production credentials to reach a preview deployment. Cost is nil; Vercel Pro
-bills per seat.
+**Why the change from two projects:** the mismatch guard is the real protection —
+it blocks a production app from touching dev and a dev app from touching
+production, regardless of how Vercel is configured. Given that, one project is
+materially less dashboard configuration for Connor to get wrong, and the anon
+key is public anyway so the "credential leak into preview" argument for two
+projects is weak. Verified 29 July: the guard refuses a mismatched build and a
+build with missing variables.
+
+**Revisit if** the product is ever white-labelled or a second agency is hosted,
+where separate projects would give cleaner isolation.
