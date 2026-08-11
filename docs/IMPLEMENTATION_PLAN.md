@@ -13,8 +13,8 @@ Owner: Connor Foreman · Release approval: Rick Wadsworth
 | # | Package | Status | Touches production? |
 |---|---|---|---|
 | **1.1** | Fix the privilege vulnerability | **✅ Complete — applied to prod 29 Jul** | Done |
-| 0.1 | Establish the database truth | **In progress** | No |
-| 0.2 | Build the development database | Not started | No |
+| 0.1 | Establish the database truth | **✅ Complete — schema verified 29 Jul** | No |
+| 0.2 | Build the development database | **Next** | No |
 | 0.3 | Separate deployments and environments | Not started | Vercel only |
 | 0.4 | Safe operating and release controls | Not started | Settings only |
 | 1.2 | Harden authentication and administration | Not started | Yes |
