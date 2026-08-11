@@ -5,6 +5,12 @@
 //
 // There is no fallback. If the required variables are missing the app refuses
 // to start with a clear message, rather than silently defaulting to production.
+//
+// IMPORTANT: NEXT_PUBLIC_* variables must be read by their exact literal names
+// (process.env.NEXT_PUBLIC_FOO), never through a dynamic key like
+// process.env[name]. Next.js inlines them at build time only for static reads;
+// a dynamic read comes back undefined in the Edge runtime (middleware), which
+// would make this guard wrongly believe the config is missing.
 
 // Known Supabase projects. These refs are PUBLIC — they appear in the project
 // URL and in the anon JWT. They are used ONLY to cross-check that the declared
@@ -15,14 +21,13 @@ const KNOWN_PROJECTS: Record<string, string> = {
   development: "ficmtwvmmcsxxexhysbd",
 };
 
-// Trim and strip stray non-printable characters that a pasted dashboard value
+// Trim and strip stray non-printable characters a pasted dashboard value
 // sometimes carries (newline, BOM, non-breaking space).
 function clean(value: string | undefined) {
   return (value ?? "").trim().replace(/[^\x20-\x7E]/g, "");
 }
 
-function required(name: string): string {
-  const value = clean(process.env[name]);
+function requireValue(name: string, value: string): string {
   if (!value) {
     throw new Error(
       `Missing required environment variable ${name}. ` +
@@ -33,9 +38,10 @@ function required(name: string): string {
   return value;
 }
 
-export const APP_ENV = required("NEXT_PUBLIC_APP_ENV"); // 'development' | 'production'
-const SUPABASE_URL = required("NEXT_PUBLIC_SUPABASE_URL");
-const SUPABASE_ANON_KEY = required("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+// Static reads so Next.js inlines them into every bundle, including middleware.
+export const APP_ENV = requireValue("NEXT_PUBLIC_APP_ENV", clean(process.env.NEXT_PUBLIC_APP_ENV));
+const SUPABASE_URL = requireValue("NEXT_PUBLIC_SUPABASE_URL", clean(process.env.NEXT_PUBLIC_SUPABASE_URL));
+const SUPABASE_ANON_KEY = requireValue("NEXT_PUBLIC_SUPABASE_ANON_KEY", clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
 
 // The mismatch guard: the declared environment must match the project the URL
 // actually points at. A production app pointed at dev — or a dev app pointed at
