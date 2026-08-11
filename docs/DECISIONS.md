@@ -61,6 +61,18 @@ trigger_present=1. Vulnerability closed on production.
 
 ---
 
+### D8 — 0.3 production cut-over follows the release process (Rick signs off)
+**Date:** 3 August 2026 · **Decided by:** Connor
+
+The production cut-over for 0.3 will follow the agreed release process rather
+than being rushed. Rick's role for this package is a **post-deploy smoke test**
+(0.3 is infrastructure, with nothing for him to acceptance-test beforehand):
+after the cut-over he logs into the live site and confirms he can sign in, sees
+the real data, and there is no dev banner. Safe preparation (setting the
+production variables) can happen before that; the merge/deploy waits for Rick.
+
+---
+
 ### D5 — Role-based access, not organisation-based
 **Date:** 29 July 2026 · **Status:** recorded, not yet formally decided
 
