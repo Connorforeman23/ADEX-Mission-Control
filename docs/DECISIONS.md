@@ -56,6 +56,9 @@ leave it open for weeks.
 tooling exists, so it is applied manually by Connor via the Supabase SQL editor
 and recorded here.
 
+**Applied:** 29 July 2026. Verification query returned policy_present=1,
+trigger_present=1. Vulnerability closed on production.
+
 ---
 
 ### D5 — Role-based access, not organisation-based
