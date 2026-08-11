@@ -93,16 +93,21 @@ Supabase Pro takes **daily backups** automatically (retained 7 days on Pro).
 **Verify backups exist** (do this once now, then it's assured):
 - Production Supabase → Database → Backups → confirm a recent daily backup is listed.
 
-**Restore test** — prove a backup can actually be recovered, without touching prod:
-1. Create a **temporary** new Supabase project (any name, e.g. `adex-restore-test`).
-2. In production → Database → Backups, download the latest backup.
-3. Restore it into the temporary project (or use Supabase's restore-to-new-project
-   if available on the plan).
-4. Confirm the data is present and sane in the temporary project.
-5. **Delete the temporary project.** Its only purpose was to prove the backup works.
+**Restore test** — prove a backup can actually be recovered, without touching prod.
+Use Supabase's built-in **Restore to new project** (Database → Backups → that tab):
+1. Pick the latest daily backup → **Restore to new project**.
+2. Name it `adex-restore-test`, same region (eu-west-2), let it provision (a few mins).
+3. Open the new project → Table Editor → confirm real data is present and sane
+   (e.g. `clients` shows Randox; `client_invoices` has sensible figures).
+4. **Delete the temporary project** (Settings → General → Delete project). This stops
+   its cost and removes the copy of live data.
 
-Record the date you did this in `docs/0.4_EVIDENCE.md`. Repeat if the schema
-changes materially.
+Cost: a temporary project uses paid compute only while it exists — negligible if
+deleted straight after. Record the date in `docs/0.4_EVIDENCE.md`. Repeat if the
+schema changes materially.
+
+> Backups cover the **database** only, not files in Supabase Storage. No file
+> uploads are in use yet; if they're added later, arrange separate Storage backup.
 
 > Point-in-time recovery is deliberately **out of scope** (DECISIONS.md D2).
 > Daily backups + tested restore is the agreed recovery posture.
