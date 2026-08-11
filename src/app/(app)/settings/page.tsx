@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireFullAccess } from "@/lib/queries";
+import { requireFullAccess, getMyProfile } from "@/lib/queries";
 import { COMMISSION_RATE, MARGIN_FLOOR, VAT_RATE, initials } from "@/lib/money";
 import { INVOICE_TOLERANCE } from "@/lib/po";
 import { SUPPLIERS_BY_CHANNEL } from "@/lib/reference";
+import TeamAdmin from "@/components/TeamAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ const COMMISSION_ROWS = [
 
 export default async function SettingsPage() {
   await requireFullAccess();
+  const profile = await getMyProfile();
+  const isAdmin = profile?.role === "admin";
   const supabase = await createClient();
   const { data: team } = await supabase
     .from("profiles")
@@ -93,6 +96,8 @@ export default async function SettingsPage() {
           </div>
         </section>
       </div>
+
+      {isAdmin && <TeamAdmin />}
 
       <div className="cols">
         <section className="card">

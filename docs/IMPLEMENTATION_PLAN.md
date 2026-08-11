@@ -47,7 +47,7 @@ out-of-scope items · a rollback route · a short evidence report.
 |---|---|---|
 | Production schema export (`supabase db dump --schema-only`) — needs the database password | 0.1 completion, all of 0.2 | Connor |
 | Dev Supabase project created | 0.2 | Connor |
-| Microsoft 365 SMTP credentials | 1.2 | Connor |
+| Microsoft 365 SMTP credentials — **deferred**: reset emails wait for the O365 migration (~end Aug 2026); interim resets via Supabase dashboard | 1.2 email sending (rest of 1.2 done without it) | Connor |
 | Rick's availability for acceptance testing | Every release | Connor |
 
 ---
