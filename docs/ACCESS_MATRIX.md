@@ -1,7 +1,6 @@
 # Access matrix
 
-**Status: draft — describes what the system does *today*, not what it should do.**
-The definitive matrix is agreed in work package 1.3. Do not treat this as approved.
+**Status: AGREED — work package 1.3 (11 Aug 2026).** This is the approved model.
 
 ---
 
@@ -33,22 +32,24 @@ The definitive matrix is agreed in work package 1.3. Do not treat this as approv
 
 ---
 
-## Known gaps — to be resolved in 1.3
+## Gaps — resolution status
 
-| Gap | Detail |
+| Gap | Resolution |
 |---|---|
-| **Anyone can change their own role** | Critical. `self update profile` permits updating any column including `role`. Fixed in 1.1 |
-| **Everyone can read every profile** | All users see all staff names, emails and roles |
-| **Restricted users cannot book campaigns** | `po_counters` is full-staff only, so PO generation fails with a database error rather than a clear refusal |
-| **Settings is not protected at the database level** | Only the page guard stops a restricted user; the underlying data is readable |
-| **`standard` and `admin` are barely distinct** | Both reach Settings. The only real boundary today is `restricted` vs everyone else |
-| **No deactivated state** | Removing someone means deleting them; an open session keeps working until the token expires |
+| **Anyone can change their own role** | ✅ Fixed in 1.1 (`guard_profile_fields` trigger). |
+| **Restricted users cannot book campaigns** | ✅ **1.3** — booking is refused cleanly with a clear message (server-side, authoritative) and the booking entry points are hidden from restricted users. No more raw database error. |
+| **Restricted users could create records they then can't see** | ✅ **1.3** — a restricted user's new leads/contacts/creative are auto-owned by them, so the "own only" model can't trap them. |
+| **`standard` and `admin` barely distinct** | ✅ Real boundary since 1.2: only admins manage the team. Standard keeps Settings as read-only reference (agreed). |
+| **Everyone can read every profile** | Accepted. Colleagues seeing colleague names is normal for a CRM, and the owner dropdowns need it. Emails/roles exposure judged low-risk. |
+| **No deactivated state** | Deferred to **1.5 (offboarding)** — actually revoking an active login. |
 
 ---
 
-## To be decided in 1.3
+## Decisions taken in 1.3 (11 Aug 2026)
 
-- Should `standard` reach Settings at all?
-- Which profile fields are visible to whom — full profiles for admins, display names only for others?
-- Should restricted users be able to book campaigns (and so need PO access), or be explicitly refused with a clear message?
-- What a deactivated user can see and do, and how quickly access ends
+- **Standard keeps Settings** — as read-only reference; administration (team) is already admin-only.
+- **Profile visibility** — left as-is (all authenticated can read profiles); low-risk, and forms depend on it.
+- **Restricted users cannot book** — refused cleanly with a message; booking is an admin/standard task.
+- **Deactivation** — out of scope here; belongs to 1.5.
+- **Restricted role is not yet in use** — the model is built and tested on dev with a test account; real
+  data owner-assignment happens if/when a restricted user is onboarded.

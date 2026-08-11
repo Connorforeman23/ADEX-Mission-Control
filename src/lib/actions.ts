@@ -41,6 +41,27 @@ const money = (v: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** The signed-in user with their role, for access decisions in write actions. */
+async function meWithRole(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { user: null, role: null as string | null };
+  const { data } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  return { user, role: (data?.role ?? null) as string | null };
+}
+
+// A restricted user can only ever own what they create — forcing the owner to
+// themselves means the "see only your own" model can never trap them with a
+// record they created but then cannot see.
+function ownerFor(role: string | null, userId: string, chosen: string) {
+  return role === "restricted" ? userId : chosen || null;
+}
+
+const RESTRICTED_NO_BOOKING =
+  "Booking media is handled by the wider team. As a restricted user you can manage your own " +
+  "clients and prospects, but not raise campaigns or purchase orders — ask an admin to book for you.";
+
 /** Next reference in the AE-#### series. */
 async function nextRef(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data } = await supabase
@@ -56,10 +77,9 @@ async function nextRef(supabase: Awaited<ReturnType<typeof createClient>>) {
 export async function createCampaign(input: CampaignInput) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, role } = await meWithRole(supabase);
   if (!user) return { error: "You need to be signed in." };
+  if (role === "restricted") return { error: RESTRICTED_NO_BOOKING };
 
   const name = input.name.trim();
   const clientName = input.clientName.trim();
@@ -232,10 +252,9 @@ function lineRow(l: LineInput) {
 export async function updateCampaign(campaignId: string, input: CampaignInput) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, role } = await meWithRole(supabase);
   if (!user) return { error: "You need to be signed in." };
+  if (role === "restricted") return { error: RESTRICTED_NO_BOOKING };
 
   const name = input.name.trim();
   const clientName = input.clientName.trim();
@@ -482,6 +501,8 @@ export type ContactInput = {
 
 export async function saveContact(input: ContactInput) {
   const supabase = await createClient();
+  const { user, role } = await meWithRole(supabase);
+  if (!user) return { error: "You need to be signed in." };
   if (!input.firstName.trim()) return { error: "Give the contact a first name." };
   if (!input.organisation.trim()) return { error: "Every contact needs an organisation." };
 
@@ -496,7 +517,7 @@ export async function saveContact(input: ContactInput) {
     linkedin: input.linkedin.trim() || null,
     notes: input.notes.trim() || null,
     status: input.status,
-    owner_id: input.ownerId || null,
+    owner_id: ownerFor(role, user.id, input.ownerId),
     lead_id: input.leadId || null,
   };
 
@@ -620,6 +641,8 @@ export type LeadInput = {
 
 export async function saveLead(input: LeadInput) {
   const supabase = await createClient();
+  const { user, role } = await meWithRole(supabase);
+  if (!user) return { error: "You need to be signed in." };
   const name = input.name.trim();
   if (!name) return { error: "Give the opportunity a name." };
 
@@ -629,7 +652,7 @@ export async function saveLead(input: LeadInput) {
     sector: input.sector.trim() || null,
     value: money(input.value),
     stage: input.stage,
-    owner_id: input.ownerId || null,
+    owner_id: ownerFor(role, user.id, input.ownerId),
     next_action: input.nextAction.trim() || null,
   };
 
@@ -700,6 +723,8 @@ export type CreativeInput = {
 
 export async function saveCreativeItem(input: CreativeInput) {
   const supabase = await createClient();
+  const { user, role } = await meWithRole(supabase);
+  if (!user) return { error: "You need to be signed in." };
   if (!input.item.trim()) return { error: "Give the item a name." };
 
   const row = {
@@ -709,7 +734,7 @@ export async function saveCreativeItem(input: CreativeInput) {
     spec: input.spec.trim() || null,
     due_date: input.dueDate || null,
     stage: input.stage,
-    owner_id: input.ownerId || null,
+    owner_id: ownerFor(role, user.id, input.ownerId),
     design_source: input.designSource,
   };
 

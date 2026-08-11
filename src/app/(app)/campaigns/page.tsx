@@ -1,4 +1,4 @@
-import { getCampaigns } from "@/lib/queries";
+import { getCampaigns, getMyProfile } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 import CampaignTable from "@/components/CampaignTable";
 
@@ -10,12 +10,14 @@ export default async function CampaignsPage({
   searchParams: Promise<{ new?: string; open?: string }>;
 }) {
   const supabase = await createClient();
-  const [campaigns, { data: clients }, { data: staff }, params] = await Promise.all([
+  const [campaigns, { data: clients }, { data: staff }, params, profile] = await Promise.all([
     getCampaigns(),
     supabase.from("clients").select("id, name").order("name"),
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
     searchParams,
+    getMyProfile(),
   ]);
+  const canBook = profile?.role !== "restricted";
 
   return (
     <div className="page">
@@ -36,6 +38,7 @@ export default async function CampaignsPage({
         staffList={staff ?? []}
         openNew={params.new === "1"}
         openId={params.open}
+        canBook={canBook}
       />
     </div>
   );

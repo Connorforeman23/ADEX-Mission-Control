@@ -12,8 +12,10 @@ const OPTIONS = [
 ];
 
 /** The dashboard's "+ New" menu — one place to add anything. */
-export default function QuickNew() {
+export default function QuickNew({ canBook = true }: { canBook?: boolean }) {
   const router = useRouter();
+  // Restricted users can't book campaigns, so drop that option entirely.
+  const options = canBook ? OPTIONS : OPTIONS.filter((o) => o.href !== "/campaigns?new=1");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,7 +37,7 @@ export default function QuickNew() {
       </button>
       {open && (
         <div className="menu">
-          {OPTIONS.map((o) => (
+          {options.map((o) => (
             <button
               key={o.href}
               className="menu-item"
