@@ -15,7 +15,7 @@ Owner: Connor Foreman · Release approval: Rick Wadsworth
 | **1.1** | Fix the privilege vulnerability | **✅ Complete — applied to prod 29 Jul** | Done |
 | 0.1 | Establish the database truth | **✅ Complete — schema verified 29 Jul** | No |
 | 0.2 | Build the development database | **✅ Complete — dev matches prod 29 Jul** | No |
-| 0.3 | Separate deployments and environments | **Next** | Vercel only |
+| 0.3 | Separate deployments and environments | **Proven on preview — production cut-over gated on Rick** | Pending merge |
 | 0.4 | Safe operating and release controls | Not started | Settings only |
 | 1.2 | Harden authentication and administration | Not started | Yes |
 | 1.3 | Implement the agreed access model | Not started | Yes |

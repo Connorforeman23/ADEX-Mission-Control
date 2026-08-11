@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { supabaseUrl, supabaseAnonKey } from "./client";
+import { supabaseUrl, supabaseAnonKey } from "@/lib/env";
 
 // Supabase client for use in Server Components, Route Handlers and Server Actions.
 export async function createClient() {
