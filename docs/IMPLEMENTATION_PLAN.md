@@ -19,8 +19,8 @@ Owner: Connor Foreman · Release approval: Rick Wadsworth
 | 0.4 | Safe operating and release controls | **✅ Complete — 11 Aug** | Settings only |
 | 1.2 | Harden authentication and administration | **✅ Complete — 11 Aug** | Done |
 | 1.3 | Implement the agreed access model | **✅ Complete — 11 Aug** | Done |
-| 1.4 | Protect campaign and financial integrity | **Next** | Yes |
-| 1.5 | Auditability and offboarding | Not started | Yes |
+| 1.4 | Protect campaign and financial integrity | **✅ Complete — 11 Aug** | Done |
+| 1.5 | Auditability and offboarding | **Next** | Yes |
 | 1.6 | Security regression and controlled release | Not started | Yes |
 
 **Sequencing note.** 1.1 runs before Phase 0 by exception — see DECISIONS.md D4.
