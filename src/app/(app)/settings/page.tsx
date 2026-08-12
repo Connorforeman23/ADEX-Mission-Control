@@ -4,6 +4,7 @@ import { COMMISSION_RATE, MARGIN_FLOOR, VAT_RATE, initials } from "@/lib/money";
 import { INVOICE_TOLERANCE } from "@/lib/po";
 import { SUPPLIERS_BY_CHANNEL } from "@/lib/reference";
 import TeamAdmin from "@/components/TeamAdmin";
+import ActivityLog from "@/components/ActivityLog";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +99,8 @@ export default async function SettingsPage() {
       </div>
 
       {isAdmin && <TeamAdmin />}
+
+      {isAdmin && <ActivityLog />}
 
       <div className="cols">
         <section className="card">
