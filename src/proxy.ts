@@ -43,6 +43,23 @@ export default async function proxy(request: NextRequest) {
     path.startsWith("/set-password") ||
     path.startsWith("/auth/");
 
+  // Offboarding: a disabled account is locked out immediately. Checked on every
+  // request, so revoking access takes effect on the user's very next click.
+  if (user) {
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("active")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (prof?.active === false) {
+      if (isAuthPage) return response;
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("error", "Your access has been removed. Contact an administrator.");
+      return NextResponse.redirect(url);
+    }
+  }
+
   if (!user && !isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

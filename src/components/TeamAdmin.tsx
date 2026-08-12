@@ -13,6 +13,7 @@ type StaffRow = {
   role: "admin" | "standard" | "restricted";
   is_sales: boolean;
   signed_up: boolean;
+  active: boolean;
 };
 
 const ROLES = ["admin", "standard", "restricted"] as const;
@@ -92,6 +93,30 @@ export default function TeamAdmin() {
     load();
   }
 
+  async function setActive(target: StaffRow, next: boolean) {
+    if (!next) {
+      const ok = window.confirm(
+        `Disable ${target.full_name}?\n\n` +
+          "They'll be locked out on their next click. Their record and history are kept. " +
+          "For permanent removal, also delete their login in Supabase afterwards."
+      );
+      if (!ok) return;
+    }
+    setError(null);
+    setBusy(target.email);
+    const { error } = await supabase.rpc("admin_set_active", {
+      p_email: target.email,
+      p_active: next,
+    });
+    setBusy(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    flash(next ? `${target.full_name} re-enabled.` : `${target.full_name} disabled — access revoked.`);
+    load();
+  }
+
   async function remove(target: StaffRow) {
     const ok = window.confirm(
       `Remove ${target.full_name} from the staff list?\n\n` +
@@ -136,12 +161,16 @@ export default function TeamAdmin() {
                   <small>{m.email}</small>
                 </div>
                 {m.is_sales && <span className="pill">Sales</span>}
-                <span className="pill">{m.signed_up ? "Signed up" : "Invited"}</span>
+                {m.signed_up && !m.active ? (
+                  <span className="pill" style={{ color: "var(--crit)" }}>Disabled</span>
+                ) : (
+                  <span className="pill">{m.signed_up ? "Signed up" : "Invited"}</span>
+                )}
                 <select
                   className="input"
                   style={{ width: 130, padding: "6px 8px" }}
                   value={m.role}
-                  disabled={busy === m.email}
+                  disabled={busy === m.email || (m.signed_up && !m.active)}
                   onChange={(e) => changeRole(m, e.target.value)}
                 >
                   {ROLES.map((r) => (
@@ -150,6 +179,16 @@ export default function TeamAdmin() {
                     </option>
                   ))}
                 </select>
+                {m.signed_up && (
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy === m.email}
+                    onClick={() => setActive(m, !m.active)}
+                  >
+                    {m.active ? "Disable" : "Enable"}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn"
