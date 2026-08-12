@@ -42,6 +42,7 @@ export default function CampaignTable({
   staffList,
   openNew,
   openId,
+  canBook = true,
 }: {
   campaigns: Campaign[];
   clients: { id: string; name: string }[];
@@ -49,13 +50,15 @@ export default function CampaignTable({
   openNew?: boolean;
   /** Campaign id to open in the detail panel on arrival (dashboard click-through). */
   openId?: string;
+  /** Restricted users can't book — hides the New campaign entry points. */
+  canBook?: boolean;
 }) {
   const [staff, setStaff] = useState("All");
   const [client, setClient] = useState("All");
   const [status, setStatus] = useState("All");
   const [channel, setChannel] = useState("All");
   const [view, setView] = useState<"list" | "board">("list");
-  const [editor, setEditor] = useState<{ open: boolean; editing?: EditingCampaign }>({ open: !!openNew });
+  const [editor, setEditor] = useState<{ open: boolean; editing?: EditingCampaign }>({ open: !!openNew && canBook });
   const [detail, setDetail] = useState<Campaign | null>(
     openId ? campaigns.find((c) => c.id === openId) ?? null : null
   );
@@ -203,9 +206,11 @@ export default function CampaignTable({
               { value: "board", label: "Board" },
             ]}
           />
-          <button className="btn btn-primary" onClick={() => setEditor({ open: true })}>
-            New campaign
-          </button>
+          {canBook && (
+            <button className="btn btn-primary" onClick={() => setEditor({ open: true })}>
+              New campaign
+            </button>
+          )}
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCampaigns, getOpenLeads, getPoVariances, getTasks } from "@/lib/queries";
+import { getCampaigns, getOpenLeads, getPoVariances, getTasks, getMyProfile } from "@/lib/queries";
 import QuickNew from "@/components/QuickNew";
 import {
   CHANNELS,
@@ -19,12 +19,14 @@ import BarList, { type BarRow } from "@/components/BarList";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [campaigns, leads, variances, tasks] = await Promise.all([
+  const [campaigns, leads, variances, tasks, profile] = await Promise.all([
     getCampaigns(),
     getOpenLeads(),
     getPoVariances(),
     getTasks(),
+    getMyProfile(),
   ]);
+  const canBook = profile?.role !== "restricted";
   const today = new Date().toISOString().slice(0, 10);
   const dueTasks = tasks.filter((t) => !t.done && t.due_date && t.due_date <= today).slice(0, 5);
 
@@ -83,7 +85,7 @@ export default async function DashboardPage() {
               : "Nothing booked yet — add your first campaign to bring this to life."}
           </p>
         </div>
-        <QuickNew />
+        <QuickNew canBook={canBook} />
       </div>
 
       <div className="kpis">
