@@ -20,8 +20,8 @@ Owner: Connor Foreman · Release approval: Rick Wadsworth
 | 1.2 | Harden authentication and administration | **✅ Complete — 11 Aug** | Done |
 | 1.3 | Implement the agreed access model | **✅ Complete — 11 Aug** | Done |
 | 1.4 | Protect campaign and financial integrity | **✅ Complete — 11 Aug** | Done |
-| 1.5 | Auditability and offboarding | **Next** | Yes |
-| 1.6 | Security regression and controlled release | Not started | Yes |
+| 1.5 | Auditability and offboarding | **✅ Complete — 11 Aug** | Done |
+| 1.6 | Security regression and controlled release | **Next** | Yes |
 
 **Sequencing note.** 1.1 runs before Phase 0 by exception — see DECISIONS.md D4.
 It is a single policy change with no data migration, and the vulnerability is live.
