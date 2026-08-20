@@ -21,6 +21,7 @@ const NAV = [
   {
     group: "Grow",
     items: [
+      { href: "/organisations", label: "Organisations", icon: "M3 21V7l6-4v18M3 21h18M9 21V11h12v10M13 15h1M17 15h1M13 18h1M17 18h1" },
       { href: "/clients", label: "Clients", icon: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 20a6 6 0 0 1 12 0M18 20a5.5 5.5 0 0 0-3-4.9" },
       { href: "/contacts", label: "Contacts", icon: "M16 4h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-1M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 21a6 6 0 0 1 12 0M3 8h4M3 12h4" },
       { href: "/pipeline", label: "Pipeline", icon: "M4 5h16M6 12h12M9 19h6" },

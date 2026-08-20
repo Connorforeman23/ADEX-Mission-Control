@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Campaign } from "@/lib/money";
+// Row type lives in lib/organisations.ts (no server imports) so client
+// components can use it without pulling this module into the browser bundle.
+import type { OrganisationRow } from "@/lib/organisations";
 
 // Campaigns with their client, owner and booking lines in one round trip.
 // First nudges statuses along: booked campaigns whose start date has arrived
@@ -205,4 +208,73 @@ export async function getPoVariances(tolerance = 25): Promise<PoVariance[]> {
       campaign_ref: r.campaign_lines!.campaigns?.ref ?? "—",
     }))
     .filter((r) => Math.abs(r.diff) > tolerance);
+}
+
+// --- organisations (Phase 3) ---------------------------------------------
+
+/**
+ * Every company in one place: customer lifecycle, supplier flag, their people,
+ * and what they're worth on each side of the relationship.
+ */
+export async function getOrganisations(): Promise<OrganisationRow[]> {
+  const supabase = await createClient();
+  const [orgsRes, contactsRes, campaignsRes, linesRes] = await Promise.all([
+    supabase
+      .from("organisations")
+      .select("id, name, sector, customer_status, is_supplier, archived, profiles ( full_name )")
+      .order("name"),
+    supabase.from("contacts").select("organisation_id"),
+    supabase.from("campaigns").select("id, fee, client_org_id, campaign_lines ( client_charge )"),
+    supabase.from("campaign_lines").select("supplier_org_id, supplier_net"),
+  ]);
+
+  if (orgsRes.error) {
+    console.error("getOrganisations", orgsRes.error.message);
+    return [];
+  }
+
+  type OrgRaw = {
+    id: string;
+    name: string;
+    sector: string | null;
+    customer_status: string;
+    is_supplier: boolean;
+    archived: boolean;
+    profiles: { full_name: string } | null;
+  };
+
+  const contactCount = new Map<string, number>();
+  for (const c of (contactsRes.data ?? []) as { organisation_id: string | null }[]) {
+    if (c.organisation_id) contactCount.set(c.organisation_id, (contactCount.get(c.organisation_id) ?? 0) + 1);
+  }
+
+  const campaignCount = new Map<string, number>();
+  const billings = new Map<string, number>();
+  type CampRaw = { client_org_id: string | null; fee: number; campaign_lines: { client_charge: number }[] };
+  for (const c of (campaignsRes.data ?? []) as unknown as CampRaw[]) {
+    if (!c.client_org_id) continue;
+    campaignCount.set(c.client_org_id, (campaignCount.get(c.client_org_id) ?? 0) + 1);
+    const value = (c.campaign_lines ?? []).reduce((a, l) => a + Number(l.client_charge), 0) + Number(c.fee);
+    billings.set(c.client_org_id, (billings.get(c.client_org_id) ?? 0) + value);
+  }
+
+  const spend = new Map<string, number>();
+  for (const l of (linesRes.data ?? []) as { supplier_org_id: string | null; supplier_net: number }[]) {
+    if (!l.supplier_org_id) continue;
+    spend.set(l.supplier_org_id, (spend.get(l.supplier_org_id) ?? 0) + Number(l.supplier_net));
+  }
+
+  return ((orgsRes.data ?? []) as unknown as OrgRaw[]).map((o) => ({
+    id: o.id,
+    name: o.name,
+    sector: o.sector ?? "—",
+    owner: o.profiles?.full_name ?? "—",
+    customer_status: o.customer_status,
+    is_supplier: o.is_supplier,
+    archived: o.archived,
+    contacts: contactCount.get(o.id) ?? 0,
+    campaigns: campaignCount.get(o.id) ?? 0,
+    billings: billings.get(o.id) ?? 0,
+    supplier_spend: spend.get(o.id) ?? 0,
+  }));
 }
