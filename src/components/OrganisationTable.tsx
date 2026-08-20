@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Segmented from "@/components/Segmented";
 import { gbp } from "@/lib/money";
-import { CUSTOMER_STATUS_LABEL, type OrganisationRow } from "@/lib/queries";
+import { CUSTOMER_STATUS_LABEL, type OrganisationRow } from "@/lib/organisations";
 
 // Every company in one list. A company can be a customer and a supplier at the
 // same time, so the relationship filter is a lens, not a category.

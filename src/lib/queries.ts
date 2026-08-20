@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Campaign } from "@/lib/money";
+// Row type lives in lib/organisations.ts (no server imports) so client
+// components can use it without pulling this module into the browser bundle.
+import type { OrganisationRow } from "@/lib/organisations";
 
 // Campaigns with their client, owner and booking lines in one round trip.
 // First nudges statuses along: booked campaigns whose start date has arrived
@@ -208,29 +211,6 @@ export async function getPoVariances(tolerance = 25): Promise<PoVariance[]> {
 }
 
 // --- organisations (Phase 3) ---------------------------------------------
-
-export type OrganisationRow = {
-  id: string;
-  name: string;
-  sector: string;
-  owner: string;
-  customer_status: string;
-  is_supplier: boolean;
-  archived: boolean;
-  contacts: number;
-  campaigns: number;
-  billings: number;
-  supplier_spend: number;
-};
-
-/** Human labels for the customer lifecycle. */
-export const CUSTOMER_STATUS_LABEL: Record<string, string> = {
-  prospect: "Prospect",
-  active_client: "Active client",
-  former_client: "Former client",
-  not_pursuing: "Not pursuing",
-  none: "No customer relationship",
-};
 
 /**
  * Every company in one place: customer lifecycle, supplier flag, their people,
