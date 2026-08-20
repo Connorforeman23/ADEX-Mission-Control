@@ -121,12 +121,28 @@ export async function createCampaign(input: CampaignInput) {
   const starts = lines.map((l) => l.start_date).sort();
   const ends = lines.map((l) => l.end_date).sort();
 
+  // The client organisation is the master record; booking work for them makes
+  // them an active client.
+  const { data: clientOrgId } = await supabase.rpc("find_or_create_organisation", {
+    p_name: clientName,
+    p_sector: null,
+    p_owner: input.ownerId || null,
+  });
+  if (clientOrgId) {
+    await supabase.rpc("set_organisation_status", {
+      p_org: clientOrgId,
+      p_status: "active_client",
+      p_reason: `Campaign booked: ${name}`,
+    });
+  }
+
   const { data: campaign, error: campaignError } = await supabase
     .from("campaigns")
     .insert({
       ref: await nextRef(supabase),
       name,
       client_id: clientId,
+      client_org_id: (clientOrgId as string | null) ?? null,
       status: input.status,
       owner_id: input.ownerId || null,
       region: input.region,
@@ -549,10 +565,30 @@ async function promoteWonLead(
 ) {
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, name, value, owner_id, sector")
+    .select("id, name, value, owner_id, sector, organisation_id")
     .eq("id", leadId)
     .maybeSingle();
   if (!lead) return;
+
+  // Winning the work makes the company an active client. Recorded as a tracked
+  // status change with its reason, not a silent overwrite.
+  const orgId =
+    (lead.organisation_id as string | null) ??
+    ((
+      await supabase.rpc("find_or_create_organisation", {
+        p_name: lead.name,
+        p_sector: lead.sector,
+        p_owner: lead.owner_id,
+      })
+    ).data as string | null);
+
+  if (orgId) {
+    await supabase.rpc("set_organisation_status", {
+      p_org: orgId,
+      p_status: "active_client",
+      p_reason: `Won opportunity: ${lead.name}`,
+    });
+  }
 
   // 1. Client record (find or create by name).
   const { data: existing } = await supabase
@@ -590,6 +626,7 @@ async function promoteWonLead(
       ref: `AE-${(Number.isFinite(n) ? n : 2600) + 1}`,
       name: `${lead.name} — first campaign`,
       client_id: clientId,
+      client_org_id: orgId,
       status: "planning",
       owner_id: lead.owner_id,
       note: `Auto-created when the ${lead.name} deal closed won (£${Number(lead.value).toLocaleString("en-GB")}). Add booking lines.`,
@@ -646,14 +683,25 @@ export async function saveLead(input: LeadInput) {
   const name = input.name.trim();
   if (!name) return { error: "Give the opportunity a name." };
 
+  const ownerId = ownerFor(role, user.id, input.ownerId);
+
+  // Organisations are the master company record, so an opportunity always has
+  // one — found by name, or created as a prospect if this company is new.
+  const { data: orgId } = await supabase.rpc("find_or_create_organisation", {
+    p_name: name,
+    p_sector: input.sector.trim() || null,
+    p_owner: ownerId,
+  });
+
   const row = {
     name,
     contact: input.contact.trim() || null,
     sector: input.sector.trim() || null,
     value: money(input.value),
     stage: input.stage,
-    owner_id: ownerFor(role, user.id, input.ownerId),
+    owner_id: ownerId,
     next_action: input.nextAction.trim() || null,
+    organisation_id: (orgId as string | null) ?? null,
   };
 
   let becameWon = false;

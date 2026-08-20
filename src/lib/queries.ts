@@ -2,7 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import type { Campaign } from "@/lib/money";
 // Row type lives in lib/organisations.ts (no server imports) so client
 // components can use it without pulling this module into the browser bundle.
-import type { OrganisationRow } from "@/lib/organisations";
+import type {
+  OrganisationRow,
+  OrganisationDetail,
+  OrgInvoice,
+} from "@/lib/organisations";
 
 // Campaigns with their client, owner and booking lines in one round trip.
 // First nudges statuses along: booked campaigns whose start date has arrived
@@ -277,4 +281,124 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     billings: billings.get(o.id) ?? 0,
     supplier_spend: spend.get(o.id) ?? 0,
   }));
+}
+
+/** Everything about one organisation — the hub view. */
+export async function getOrganisation(id: string): Promise<OrganisationDetail | null> {
+  const supabase = await createClient();
+
+  const { data: org, error } = await supabase
+    .from("organisations")
+    .select(
+      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, profiles ( full_name )"
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !org) return null;
+
+  const [contactsRes, oppsRes, campsRes, invRes, histRes, spendRes] = await Promise.all([
+    supabase
+      .from("contacts")
+      .select("id, first_name, last_name, job_title, email, phone, status")
+      .eq("organisation_id", id)
+      .order("first_name"),
+    supabase
+      .from("leads")
+      .select("id, name, value, stage, next_action, profiles ( full_name )")
+      .eq("organisation_id", id)
+      .order("value", { ascending: false }),
+    supabase
+      .from("campaigns")
+      .select("id, ref, name, status, start_date, end_date, fee, campaign_lines ( client_charge )")
+      .eq("client_org_id", id)
+      .order("start_date", { ascending: false, nullsFirst: false }),
+    supabase
+      .from("client_invoices")
+      .select("id, invoice_no, invoice_date, amount_ex_vat, outstanding, status")
+      .eq("client_org_id", id)
+      .order("invoice_date", { ascending: false }),
+    supabase
+      .from("organisation_status_history")
+      .select("id, old_status, new_status, changed_at, reason, profiles ( full_name )")
+      .eq("organisation_id", id)
+      .order("changed_at", { ascending: false }),
+    supabase.from("campaign_lines").select("supplier_net").eq("supplier_org_id", id),
+  ]);
+
+  type OrgRaw = { profiles: { full_name: string } | null } & Record<string, unknown>;
+  const o = org as unknown as OrgRaw;
+
+  return {
+    id: String(o.id),
+    name: String(o.name),
+    sector: (o.sector as string | null) ?? null,
+    owner: o.profiles?.full_name ?? "—",
+    customer_status: String(o.customer_status),
+    is_supplier: Boolean(o.is_supplier),
+    archived: Boolean(o.archived),
+    companies_house_no: (o.companies_house_no as string | null) ?? null,
+    website: (o.website as string | null) ?? null,
+
+    contacts: ((contactsRes.data ?? []) as unknown as {
+      id: string; first_name: string; last_name: string | null;
+      job_title: string | null; email: string | null; phone: string | null; status: string;
+    }[]).map((c) => ({
+      id: c.id,
+      name: [c.first_name, c.last_name].filter(Boolean).join(" "),
+      job_title: c.job_title,
+      email: c.email,
+      phone: c.phone,
+      status: c.status,
+    })),
+
+    opportunities: ((oppsRes.data ?? []) as unknown as {
+      id: string; name: string; value: number; stage: string;
+      next_action: string | null; profiles: { full_name: string } | null;
+    }[]).map((l) => ({
+      id: l.id,
+      name: l.name,
+      value: Number(l.value),
+      stage: l.stage,
+      next_action: l.next_action,
+      owner: l.profiles?.full_name ?? "—",
+    })),
+
+    campaigns: ((campsRes.data ?? []) as unknown as {
+      id: string; ref: string; name: string; status: string;
+      start_date: string | null; end_date: string | null;
+      fee: number; campaign_lines: { client_charge: number }[];
+    }[]).map((c) => ({
+      id: c.id,
+      ref: c.ref,
+      name: c.name,
+      status: c.status,
+      start_date: c.start_date,
+      end_date: c.end_date,
+      value: (c.campaign_lines ?? []).reduce((a, l) => a + Number(l.client_charge), 0) + Number(c.fee),
+    })),
+
+    invoices: ((invRes.data ?? []) as unknown as OrgInvoice[]).map((i) => ({
+      ...i,
+      amount_ex_vat: Number(i.amount_ex_vat),
+      outstanding: Number(i.outstanding),
+    })),
+
+    history: ((histRes.data ?? []) as unknown as {
+      id: string; old_status: string | null; new_status: string;
+      changed_at: string; reason: string | null; profiles: { full_name: string } | null;
+    }[]).map((h) => ({
+      id: h.id,
+      old_status: h.old_status,
+      new_status: h.new_status,
+      changed_at: h.changed_at,
+      changed_by: h.profiles?.full_name ?? "System",
+      reason: h.reason,
+    })),
+
+    supplier_spend: ((spendRes.data ?? []) as { supplier_net: number }[]).reduce(
+      (a, l) => a + Number(l.supplier_net),
+      0
+    ),
+  };
 }
