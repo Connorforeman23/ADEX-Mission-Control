@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
 import { deleteContact, saveContact, type ContactInput } from "@/lib/actions";
@@ -11,6 +12,7 @@ export type ContactRow = {
   last_name: string | null;
   job_title: string | null;
   organisation: string;
+  organisationId: string | null;
   email: string | null;
   phone: string | null;
   mobile: string | null;
@@ -48,11 +50,14 @@ const blank = (ownerId: string): ContactInput => ({
 export default function ContactsPanel({
   contacts,
   staff,
+  organisations,
   meId,
   openNew,
 }: {
   contacts: ContactRow[];
   staff: { id: string; full_name: string }[];
+  /** Known companies, offered as autocomplete so names don't drift. */
+  organisations: { id: string; name: string }[];
   meId: string;
   openNew?: boolean;
 }) {
@@ -169,7 +174,15 @@ export default function ContactsPanel({
         [...orgs.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([org, people]) => (
           <section className="card" key={org} style={{ marginBottom: 14 }}>
             <div className="card-head">
-              <h2>{org}</h2>
+              <h2>
+                {people[0]?.organisationId ? (
+                  <Link href={`/organisations/${people[0].organisationId}`} style={{ color: "inherit" }}>
+                    {org}
+                  </Link>
+                ) : (
+                  org
+                )}
+              </h2>
               <span className="sub">
                 {people.length} contact{people.length === 1 ? "" : "s"}
                 {people.some((p) => p.isClient) ? " · client" : ""}
@@ -257,7 +270,18 @@ export default function ContactsPanel({
               </label>
               <label className="field">
                 <span>Organisation</span>
-                <input className="input" value={editing.organisation} onChange={(e) => setEditing({ ...editing, organisation: e.target.value })} placeholder="Company they work for" />
+                <input
+                  className="input"
+                  list="known-organisations"
+                  value={editing.organisation}
+                  onChange={(e) => setEditing({ ...editing, organisation: e.target.value })}
+                  placeholder="Start typing — pick an existing company or add a new one"
+                />
+                <datalist id="known-organisations">
+                  {organisations.map((o) => (
+                    <option key={o.id} value={o.name} />
+                  ))}
+                </datalist>
               </label>
               <label className="field">
                 <span>Email</span>
