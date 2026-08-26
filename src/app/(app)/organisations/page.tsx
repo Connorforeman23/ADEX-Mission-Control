@@ -1,5 +1,5 @@
 import { getOrganisations } from "@/lib/queries";
-import { gbpK } from "@/lib/money";
+import { gbpK, MARGIN_FLOOR } from "@/lib/money";
 import OrganisationTable from "@/components/OrganisationTable";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +15,7 @@ export default async function OrganisationsPage() {
   const suppliers = live.filter((r) => r.is_supplier).length;
   const both = live.filter((r) => r.is_supplier && r.customer_status === "active_client").length;
   const billings = live.reduce((a, r) => a + r.billings, 0);
+  const belowFloor = live.filter((r) => r.billings > 0 && r.margin < MARGIN_FLOOR).length;
 
   return (
     <div className="page">
@@ -53,7 +54,11 @@ export default async function OrganisationsPage() {
         <div className="card kpi">
           <div className="eyebrow">Billings — ex VAT</div>
           <div className="num kpi-value">{gbpK(billings)}</div>
-          <div className="kpi-foot">Across every client organisation</div>
+          <div className="kpi-foot">
+            {belowFloor
+              ? `${belowFloor} below the ${MARGIN_FLOOR}% margin floor`
+              : "All accounts above the margin floor"}
+          </div>
         </div>
       </div>
 
