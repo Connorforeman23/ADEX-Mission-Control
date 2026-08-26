@@ -15,6 +15,9 @@ export type OrganisationRow = {
   contacts: number;
   campaigns: number;
   billings: number;
+  /** Billings less what the suppliers are paid — carried over from the old Clients page. */
+  profit: number;
+  margin: number;
   supplier_spend: number;
 };
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Segmented from "@/components/Segmented";
-import { gbp } from "@/lib/money";
+import { gbp, MARGIN_FLOOR } from "@/lib/money";
 import { CUSTOMER_STATUS_LABEL, type OrganisationRow } from "@/lib/organisations";
 
 // Every company in one list. A company can be a customer and a supplier at the
@@ -97,6 +97,8 @@ export default function OrganisationTable({ rows }: { rows: OrganisationRow[] })
                     <th className="r">Contacts</th>
                     <th className="r">Campaigns</th>
                     <th className="r">Billings</th>
+                    <th className="r">Profit</th>
+                    <th className="r">Margin</th>
                     <th className="r">Supplier spend</th>
                   </tr>
                 </thead>
@@ -118,6 +120,18 @@ export default function OrganisationTable({ rows }: { rows: OrganisationRow[] })
                       <td className="r num">{r.contacts || "—"}</td>
                       <td className="r num">{r.campaigns || "—"}</td>
                       <td className="r num">{r.billings ? gbp(r.billings) : "—"}</td>
+                      <td className="r num" style={{ color: r.billings ? "var(--ok)" : undefined }}>
+                        {r.billings ? gbp(r.profit) : "—"}
+                      </td>
+                      <td
+                        className="r num"
+                        style={{
+                          color:
+                            r.billings > 0 && r.margin < MARGIN_FLOOR ? "var(--crit)" : undefined,
+                        }}
+                      >
+                        {r.billings ? `${r.margin.toFixed(1)}%` : "—"}
+                      </td>
                       <td className="r num">{r.supplier_spend ? gbp(r.supplier_spend) : "—"}</td>
                     </tr>
                   ))}

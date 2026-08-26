@@ -228,7 +228,9 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
       .select("id, name, sector, customer_status, is_supplier, archived, profiles ( full_name )")
       .order("name"),
     supabase.from("contacts").select("organisation_id"),
-    supabase.from("campaigns").select("id, fee, client_org_id, campaign_lines ( client_charge )"),
+    supabase
+      .from("campaigns")
+      .select("id, fee, client_org_id, campaign_lines ( client_charge, supplier_net )"),
     supabase.from("campaign_lines").select("supplier_org_id, supplier_net"),
   ]);
 
@@ -254,12 +256,20 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
 
   const campaignCount = new Map<string, number>();
   const billings = new Map<string, number>();
-  type CampRaw = { client_org_id: string | null; fee: number; campaign_lines: { client_charge: number }[] };
+  const cost = new Map<string, number>();
+  type CampRaw = {
+    client_org_id: string | null;
+    fee: number;
+    campaign_lines: { client_charge: number; supplier_net: number }[];
+  };
   for (const c of (campaignsRes.data ?? []) as unknown as CampRaw[]) {
     if (!c.client_org_id) continue;
     campaignCount.set(c.client_org_id, (campaignCount.get(c.client_org_id) ?? 0) + 1);
-    const value = (c.campaign_lines ?? []).reduce((a, l) => a + Number(l.client_charge), 0) + Number(c.fee);
+    const lines = c.campaign_lines ?? [];
+    const value = lines.reduce((a, l) => a + Number(l.client_charge), 0) + Number(c.fee);
+    const net = lines.reduce((a, l) => a + Number(l.supplier_net), 0);
     billings.set(c.client_org_id, (billings.get(c.client_org_id) ?? 0) + value);
+    cost.set(c.client_org_id, (cost.get(c.client_org_id) ?? 0) + net);
   }
 
   const spend = new Map<string, number>();
@@ -268,19 +278,25 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     spend.set(l.supplier_org_id, (spend.get(l.supplier_org_id) ?? 0) + Number(l.supplier_net));
   }
 
-  return ((orgsRes.data ?? []) as unknown as OrgRaw[]).map((o) => ({
-    id: o.id,
-    name: o.name,
-    sector: o.sector ?? "—",
-    owner: o.profiles?.full_name ?? "—",
-    customer_status: o.customer_status,
-    is_supplier: o.is_supplier,
-    archived: o.archived,
-    contacts: contactCount.get(o.id) ?? 0,
-    campaigns: campaignCount.get(o.id) ?? 0,
-    billings: billings.get(o.id) ?? 0,
-    supplier_spend: spend.get(o.id) ?? 0,
-  }));
+  return ((orgsRes.data ?? []) as unknown as OrgRaw[]).map((o) => {
+    const gross = billings.get(o.id) ?? 0;
+    const profit = gross - (cost.get(o.id) ?? 0);
+    return {
+      id: o.id,
+      name: o.name,
+      sector: o.sector ?? "—",
+      owner: o.profiles?.full_name ?? "—",
+      customer_status: o.customer_status,
+      is_supplier: o.is_supplier,
+      archived: o.archived,
+      contacts: contactCount.get(o.id) ?? 0,
+      campaigns: campaignCount.get(o.id) ?? 0,
+      billings: gross,
+      profit,
+      margin: gross ? (profit / gross) * 100 : 0,
+      supplier_spend: spend.get(o.id) ?? 0,
+    };
+  });
 }
 
 /** Everything about one organisation — the hub view. */
