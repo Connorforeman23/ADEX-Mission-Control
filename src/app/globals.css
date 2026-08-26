@@ -295,6 +295,14 @@ td.r, th.r { text-align: right; }
   transition: transform .12s, border-color .12s;
 }
 .board .tile:hover { transform: translateY(-2px); border-color: var(--blue); }
+.board .tile:active { cursor: grabbing; }
+/* The column a dragged card is currently over. */
+.board .col.drop-target {
+  background: var(--blue-wash);
+  outline: 2px dashed var(--blue);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
 .board .tile-foot { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
 .board .tile-move {
   display: none; gap: 6px; margin-top: 9px; padding-top: 9px;

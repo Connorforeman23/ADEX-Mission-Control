@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
 import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
+import { useBoardDrag } from "@/components/useBoardDrag";
 import { gbp, gbpK } from "@/lib/money";
 import { deleteLead, moveLeadStage, saveLead, type LeadInput } from "@/lib/actions";
 
@@ -82,6 +83,10 @@ export default function PipelineBoard({
     router.refresh();
   }
 
+  // Dragging a card to another column moves the opportunity to that stage —
+  // including into Closed Won, which promotes the organisation to a client.
+  const { dragging, over, cardProps, columnProps } = useBoardDrag(move);
+
   async function remove(id: string) {
     setBusy(true);
     await deleteLead(id);
@@ -144,7 +149,11 @@ export default function PipelineBoard({
             const set = rows.filter((l) => l.stage === stage);
             const total = set.reduce((a, l) => a + Number(l.value), 0);
             return (
-              <div className="col" key={stage}>
+              <div
+                className={over === stage ? "col drop-target" : "col"}
+                key={stage}
+                {...columnProps(stage)}
+              >
                 <div className="col-head">
                   <span className="stripe" style={{ background: STAGE_TINT[stage] }} />
                   <h3>{stage}</h3>
@@ -158,11 +167,23 @@ export default function PipelineBoard({
                   </p>
                 ) : (
                   set.map((l) => (
-                    <button
+                    <div
                       className="tile"
                       key={l.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => openEdit(l)}
-                      style={{ opacity: l.stage === "Closed Lost" ? 0.62 : 1 }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openEdit(l);
+                        }
+                      }}
+                      {...cardProps(l.id)}
+                      style={{
+                        opacity: dragging === l.id ? 0.4 : l.stage === "Closed Lost" ? 0.62 : 1,
+                        cursor: "grab",
+                      }}
                     >
                       <div className="strong">{l.name}</div>
                       <div className="sub-line">
@@ -174,7 +195,7 @@ export default function PipelineBoard({
                         <span className="sub-line">{l.owner}</span>
                       </div>
                       {l.next_action && <div className="sub-line">{l.next_action}</div>}
-                    </button>
+                    </div>
                   ))
                 )}
               </div>

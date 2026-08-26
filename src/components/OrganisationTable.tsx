@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import Segmented from "@/components/Segmented";
 import { gbp } from "@/lib/money";
 import { CUSTOMER_STATUS_LABEL, type OrganisationRow } from "@/lib/organisations";
@@ -103,7 +104,9 @@ export default function OrganisationTable({ rows }: { rows: OrganisationRow[] })
                   {filtered.map((r) => (
                     <tr key={r.id}>
                       <td className="strong">
-                        {r.name}
+                        <Link href={`/organisations/${r.id}`} style={{ color: "var(--blue)" }}>
+                          {r.name}
+                        </Link>
                         {r.archived && <span className="pill" style={{ marginLeft: 8 }}>Archived</span>}
                       </td>
                       <td className="sub-line" style={{ color: STATUS_COLOUR[r.customer_status] }}>

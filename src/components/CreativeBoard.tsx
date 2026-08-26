@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
+import { useBoardDrag } from "@/components/useBoardDrag";
 import { dateGB } from "@/lib/money";
 import {
   deleteCreativeItem,
@@ -85,6 +86,15 @@ export default function CreativeBoard({
     router.refresh();
   }
 
+  // Dragging moves an item to whichever column it's dropped on, in either
+  // direction — unlike the "advance" button, which only steps forward.
+  async function moveTo(id: string, stage: string) {
+    await moveCreativeStage(id, stage);
+    router.refresh();
+  }
+
+  const { dragging, over, cardProps, columnProps } = useBoardDrag(moveTo);
+
   async function remove(id: string) {
     setBusy(true);
     await deleteCreativeItem(id);
@@ -112,7 +122,11 @@ export default function CreativeBoard({
         {STAGES.map((stage) => {
           const set = items.filter((i) => i.stage === stage);
           return (
-            <div className="col" key={stage}>
+            <div
+              className={over === stage ? "col drop-target" : "col"}
+              key={stage}
+              {...columnProps(stage)}
+            >
               <div className="col-head">
                 <span className="stripe" style={{ background: STAGE_TINT[stage] }} />
                 <h3>{stage}</h3>
@@ -125,24 +139,35 @@ export default function CreativeBoard({
               ) : (
                 set.map((i) => {
                   const overdue = i.due_date && i.due_date < today && i.stage !== "Approved";
+                  const openThis = () => {
+                    setError(null);
+                    setEditing({
+                      id: i.id,
+                      item: i.item,
+                      clientId: i.clientId,
+                      format: i.format ?? "",
+                      spec: i.spec ?? "",
+                      dueDate: i.due_date ?? "",
+                      stage: i.stage,
+                      ownerId: i.ownerId,
+                      designSource: i.designSource,
+                    });
+                  };
                   return (
-                    <button
+                    <div
                       className="tile"
                       key={i.id}
-                      onClick={() => {
-                        setError(null);
-                        setEditing({
-                          id: i.id,
-                          item: i.item,
-                          clientId: i.clientId,
-                          format: i.format ?? "",
-                          spec: i.spec ?? "",
-                          dueDate: i.due_date ?? "",
-                          stage: i.stage,
-                          ownerId: i.ownerId,
-                          designSource: i.designSource,
-                        });
+                      role="button"
+                      tabIndex={0}
+                      onClick={openThis}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openThis();
+                        }
                       }}
+                      {...cardProps(i.id)}
+                      style={{ opacity: dragging === i.id ? 0.4 : 1, cursor: "grab" }}
                     >
                       <div className="strong">{i.item}</div>
                       <div className="sub-line">{i.client}</div>
@@ -161,7 +186,7 @@ export default function CreativeBoard({
                           {i.due_date ? `Due ${dateGB(i.due_date)}` : "No date"}
                         </span>
                       </div>
-                    </button>
+                    </div>
                   );
                 })
               )}
