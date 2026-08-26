@@ -9,6 +9,7 @@ type Raw = {
   last_name: string | null;
   job_title: string | null;
   organisation: string;
+  organisation_id: string | null;
   email: string | null;
   phone: string | null;
   mobile: string | null;
@@ -31,16 +32,17 @@ export default async function ContactsPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ data: rows }, { data: staff }, params] = await Promise.all([
+  const [{ data: rows }, { data: staff }, { data: orgs }, params] = await Promise.all([
     supabase
       .from("contacts")
       .select(
-        `id, first_name, last_name, job_title, organisation, email, phone, mobile,
+        `id, first_name, last_name, job_title, organisation, organisation_id, email, phone, mobile,
          linkedin, notes, status, owner_id, lead_id, client_id, profiles ( full_name )`
       )
       .order("organisation")
       .order("first_name"),
     supabase.from("profiles").select("id, full_name").order("full_name"),
+    supabase.from("organisations").select("id, name").eq("archived", false).order("name"),
     searchParams,
   ]);
 
@@ -50,6 +52,7 @@ export default async function ContactsPage({
     last_name: c.last_name,
     job_title: c.job_title,
     organisation: c.organisation,
+    organisationId: c.organisation_id,
     email: c.email,
     phone: c.phone,
     mobile: c.mobile,
@@ -106,6 +109,7 @@ export default async function ContactsPage({
       <ContactsPanel
         contacts={contacts}
         staff={staff ?? []}
+        organisations={orgs ?? []}
         meId={user?.id ?? ""}
         openNew={params.new === "1"}
       />

@@ -522,18 +522,30 @@ export async function saveContact(input: ContactInput) {
   if (!input.firstName.trim()) return { error: "Give the contact a first name." };
   if (!input.organisation.trim()) return { error: "Every contact needs an organisation." };
 
+  const ownerId = ownerFor(role, user.id, input.ownerId);
+
+  // A contact belongs to an organisation. Matching the typed company name to an
+  // existing organisation (or creating one) is what stops the free-text company
+  // problem coming back.
+  const { data: orgId } = await supabase.rpc("find_or_create_organisation", {
+    p_name: input.organisation.trim(),
+    p_sector: null,
+    p_owner: ownerId,
+  });
+
   const row = {
     first_name: input.firstName.trim(),
     last_name: input.lastName.trim() || null,
     job_title: input.jobTitle.trim() || null,
     organisation: input.organisation.trim(),
+    organisation_id: (orgId as string | null) ?? null,
     email: input.email.trim() || null,
     phone: input.phone.trim() || null,
     mobile: input.mobile.trim() || null,
     linkedin: input.linkedin.trim() || null,
     notes: input.notes.trim() || null,
     status: input.status,
-    owner_id: ownerFor(role, user.id, input.ownerId),
+    owner_id: ownerId,
     lead_id: input.leadId || null,
   };
 
