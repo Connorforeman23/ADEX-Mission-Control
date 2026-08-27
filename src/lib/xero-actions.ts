@@ -2,19 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { fetchXeroContacts, xeroApi, xeroConfigured, type XeroContact } from "@/lib/xero";
+import { fetchXeroContacts, xeroApi, xeroConfigured } from "@/lib/xero";
+import type { LoadContactsResult, PushInvoiceResult, XeroStatus } from "@/lib/xero-types";
 
 // Server actions for the Xero panel. Every one goes through the admin-only
 // definer functions, so a non-admin calling these directly gets refused by the
 // database rather than relying on the UI hiding a button.
-
-export type XeroStatus = {
-  configured: boolean;
-  connected: boolean;
-  tenantName: string | null;
-  connectedAt: string | null;
-  lastSyncAt: string | null;
-};
+//
+// This module exports ONLY async functions. Types live in xero-types.ts —
+// exporting a type from a "use server" file makes it throw on load.
 
 export async function getXeroStatus(): Promise<XeroStatus> {
   const configured = xeroConfigured();
@@ -66,19 +62,8 @@ export async function disconnectXero() {
   return {};
 }
 
-export type XeroContactRow = {
-  xeroId: string;
-  name: string;
-  email: string | null;
-  matchedOrg: string | null;
-};
-
-type LoadResult =
-  | { ok: true; rows: XeroContactRow[]; total: number }
-  | { ok: false; error: string };
-
 /** Proves the read path, and shows how Xero's contacts line up with organisations. */
-export async function loadXeroContacts(): Promise<LoadResult> {
+export async function loadXeroContacts(): Promise<LoadContactsResult> {
   try {
     const contacts = await fetchXeroContacts();
     const supabase = await createClient();
@@ -112,7 +97,7 @@ export async function loadXeroContacts(): Promise<LoadResult> {
 export async function pushTestDraftInvoice(
   xeroContactId: string,
   contactName: string
-): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+): Promise<PushInvoiceResult> {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const result = await xeroApi<{ Invoices?: { InvoiceID: string; InvoiceNumber?: string }[] }>(
@@ -153,4 +138,3 @@ export async function pushTestDraftInvoice(
   }
 }
 
-export type { XeroContact };

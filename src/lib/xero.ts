@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import type { XeroContact } from "@/lib/xero-types";
 
 // Xero OAuth 2.0 + API access. SERVER ONLY — the "server-only" import above
 // makes the build fail if a client component ever imports this file, so the
@@ -168,8 +169,6 @@ export async function xeroApi<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return (await res.json()) as T;
 }
-
-export type XeroContact = { ContactID: string; Name: string; EmailAddress?: string };
 
 export async function fetchXeroContacts(): Promise<XeroContact[]> {
   const data = await xeroApi<{ Contacts?: XeroContact[] }>("/Contacts?order=Name");

@@ -7,17 +7,11 @@ import {
   getXeroStatus,
   loadXeroContacts,
   pushTestDraftInvoice,
-  type XeroStatus,
 } from "@/lib/xero-actions";
+import type { XeroContactRow as ContactRow, XeroStatus } from "@/lib/xero-types";
 
 // Admin-only Xero panel on Settings. Deliberately a proof of connection:
 // connect, read the contact list, and push one DRAFT invoice.
-type ContactRow = {
-  xeroId: string;
-  name: string;
-  email: string | null;
-  matchedOrg: string | null;
-};
 
 function when(iso: string | null) {
   if (!iso) return "—";
