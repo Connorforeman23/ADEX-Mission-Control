@@ -26,6 +26,10 @@ export async function getXeroStatus(): Promise<XeroStatus> {
     lastSyncAt: null,
   };
 
+  // Nothing to query if Xero was never configured on this environment — and
+  // asking anyway is a needless failure path.
+  if (!configured) return blank;
+
   let data: unknown;
   try {
     const res = await createClient().then((c) => c.rpc("xero_status"));
