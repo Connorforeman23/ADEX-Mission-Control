@@ -27,8 +27,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const state = crypto.randomUUID();
   const origin = request.nextUrl.origin;
+
+  // The whole flow must happen on ONE hostname. We set a state cookie here and
+  // read it back in the callback, but Xero always returns to the fixed
+  // XERO_REDIRECT_URI host — and a cookie set on a different Vercel preview
+  // hostname simply isn't there to read, so the check fails and the connection
+  // is rejected as expired. If we've been started from another host, move to
+  // the canonical one BEFORE setting the cookie.
+  const canonicalOrigin = new URL(xeroRedirectUri(origin)).origin;
+  if (canonicalOrigin !== origin) {
+    console.log("[xero] restarting on the canonical host:", canonicalOrigin);
+    return NextResponse.redirect(new URL("/api/xero/connect", canonicalOrigin));
+  }
+
+  const state = crypto.randomUUID();
 
   // Logged so the exact value can be compared against what's registered in Xero
   // when it complains about the redirect URI. It's a public URL, not a secret.
