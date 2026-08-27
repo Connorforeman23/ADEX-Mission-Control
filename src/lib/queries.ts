@@ -435,7 +435,13 @@ export async function getSpaceOrder(lineId: string): Promise<SpaceOrder | null> 
     .eq("id", lineId)
     .maybeSingle();
 
-  if (error || !data) return null;
+  // Log rather than fail silently: a missing column or an RLS refusal both
+  // surface as a bare 404, which explains nothing.
+  if (error) {
+    console.error("getSpaceOrder", error.message);
+    return null;
+  }
+  if (!data) return null;
 
   type Raw = {
     id: string;
