@@ -843,3 +843,33 @@ export async function updateCampaignStatus(id: string, status: string) {
   revalidatePath("/");
   return {};
 }
+
+// --- space orders --------------------------------------------------------
+
+/**
+ * Save the "To:" contact and order notes on a booking line, so reprinting a
+ * Space Order gives the same document rather than a blank one.
+ */
+export async function saveSpaceOrderDetails(
+  lineId: string,
+  supplierContact: string,
+  orderNotes: string
+) {
+  const supabase = await createClient();
+  const { user, role } = await meWithRole(supabase);
+  if (!user) return { error: "You need to be signed in." };
+  if (role === "restricted") return { error: RESTRICTED_NO_BOOKING };
+
+  const { error } = await supabase
+    .from("campaign_lines")
+    .update({
+      supplier_contact: supplierContact.trim() || null,
+      order_notes: orderNotes.trim() || null,
+    })
+    .eq("id", lineId);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/space-orders/${lineId}`);
+  revalidatePath("/finance");
+  return {};
+}

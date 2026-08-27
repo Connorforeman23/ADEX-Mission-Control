@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Campaign } from "@/lib/money";
+import { VAT_RATE, type Campaign } from "@/lib/money";
+import { spaceOrderRows, type SpaceOrder } from "@/lib/po";
 // Row type lives in lib/organisations.ts (no server imports) so client
 // components can use it without pulling this module into the browser bundle.
 import type {
@@ -416,5 +417,105 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
       (a, l) => a + Number(l.supplier_net),
       0
     ),
+  };
+}
+
+/** Everything needed to render one Space Order. */
+export async function getSpaceOrder(lineId: string): Promise<SpaceOrder | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("campaign_lines")
+    .select(
+      `id, channel, vendor, detail, selected_dates, start_date, end_date, supplier_po,
+       supplier_contact, order_notes, supplier_gross, commission_pct, copy_instruction, urn,
+       ooh_format, ooh_disp_type, supplier_org_id,
+       campaigns ( ref, name, clients ( name ), profiles ( full_name, email ) )`
+    )
+    .eq("id", lineId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  type Raw = {
+    id: string;
+    channel: string;
+    vendor: string;
+    detail: string | null;
+    selected_dates: string | null;
+    start_date: string;
+    end_date: string;
+    supplier_po: string | null;
+    supplier_contact: string | null;
+    order_notes: string | null;
+    supplier_gross: number;
+    commission_pct: number;
+    copy_instruction: string | null;
+    urn: string | null;
+    ooh_format: string | null;
+    ooh_disp_type: string | null;
+    supplier_org_id: string | null;
+    campaigns: {
+      ref: string;
+      name: string;
+      clients: { name: string } | null;
+      profiles: { full_name: string; email: string } | null;
+    } | null;
+  };
+  const l = data as unknown as Raw;
+
+  // Offer the people already saved against this supplier for the "To:" line.
+  let contacts: { id: string; name: string }[] = [];
+  if (l.supplier_org_id) {
+    const { data: people } = await supabase
+      .from("contacts")
+      .select("id, first_name, last_name")
+      .eq("organisation_id", l.supplier_org_id)
+      .order("first_name");
+    contacts = ((people ?? []) as { id: string; first_name: string; last_name: string | null }[]).map(
+      (p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(" ") })
+    );
+  }
+
+  const detail =
+    l.channel === "OOH" && l.ooh_format
+      ? `${l.detail ?? ""}${l.detail ? " · " : ""}${l.ooh_format} (${l.ooh_disp_type ?? "Static"})`
+      : l.detail ?? "";
+
+  const gross = Number(l.supplier_gross);
+  const commissionPct = Number(l.commission_pct);
+  const net = gross * (1 - commissionPct / 100);
+  const vat = net * VAT_RATE;
+
+  const rows = spaceOrderRows(
+    l.vendor,
+    detail,
+    l.selected_dates,
+    l.start_date,
+    l.end_date,
+    gross,
+    commissionPct
+  );
+
+  return {
+    lineId: l.id,
+    po: l.supplier_po ?? "—",
+    supplier: l.vendor,
+    supplierOrgId: l.supplier_org_id,
+    supplierContact: l.supplier_contact ?? "",
+    fromName: l.campaigns?.profiles?.full_name ?? "—",
+    fromEmail: l.campaigns?.profiles?.email ?? "",
+    date: new Date().toISOString().slice(0, 10),
+    client: l.campaigns?.clients?.name ?? "—",
+    summary: `${l.vendor}${rows.length > 1 ? ` x${rows.length}` : ""}${detail ? ` — ${detail}` : ""}`,
+    commissionPct,
+    copy: l.urn ? `${l.copy_instruction ?? "New Copy"} · URN ${l.urn}` : l.copy_instruction ?? "New Copy",
+    orderNotes: l.order_notes ?? "",
+    rows,
+    gross,
+    net,
+    vat,
+    total: net + vat,
+    contacts,
   };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
 import { channelLabel, dateGB, gbp, rangeGB } from "@/lib/money";
@@ -147,6 +148,10 @@ export default function PoTable({
       >
         {open && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <Link className="btn btn-primary" href={`/space-orders/${open.lineId}`}>
+              Open Space Order — print or send
+            </Link>
+
             <dl className="dl">
               <dt>Company</dt>
               <dd>{open.vendor}</dd>

@@ -120,3 +120,88 @@ export function reconcile(po: PurchaseOrder, invoices: Map<string, SupplierInvoi
   }
   return { state: "variance", invoice, diff };
 }
+
+// --- Space Order document ------------------------------------------------
+// The sheet sent to a media owner confirming a booking. Note what is NOT here:
+// the client charge. The supplier sees the rate card and what we pay them —
+// never what the client is charged.
+
+/** ADEX's own details, as they appear on the order. Taken from the real
+ *  RAN0102 order so the document matches what suppliers already recognise. */
+export const ADEX = {
+  name: "Advertising Excellence Ltd",
+  address: "G4 Ash House Business Centre, Ash Road, New Ash Green, DA3 8JD",
+  phone: "01474 365 155",
+  web: "www.advertisingexcellence.co.uk",
+  invoicesTo: ["Lynsey.tester@advertisingexcellence.co.uk", "Accounts@advertisingexcellence.co.uk"],
+};
+
+export type SpaceOrderRow = {
+  media: string;
+  date: string;
+  detail: string;
+  gross: number;
+  net: number;
+  total: number;
+};
+
+export type SpaceOrder = {
+  lineId: string;
+  po: string;
+  supplier: string;
+  supplierOrgId: string | null;
+  supplierContact: string;
+  fromName: string;
+  fromEmail: string;
+  date: string;
+  client: string;
+  summary: string;
+  commissionPct: number;
+  copy: string;
+  orderNotes: string;
+  rows: SpaceOrderRow[];
+  gross: number;
+  net: number;
+  vat: number;
+  total: number;
+  /** Contacts already saved against this supplier, for the "To:" dropdown. */
+  contacts: { id: string; name: string }[];
+};
+
+/**
+ * Split a line into one row per insertion.
+ *
+ * A single booking line often covers several dates (the FT order runs to nine
+ * insertions), and the supplier expects to see them itemised. `selected_dates`
+ * is free text, so we split on commas and divide the line's cost evenly.
+ */
+export function spaceOrderRows(
+  media: string,
+  detail: string,
+  selectedDates: string | null,
+  startDate: string,
+  endDate: string,
+  gross: number,
+  commissionPct: number
+): SpaceOrderRow[] {
+  const dates = (selectedDates ?? "")
+    .split(/[,;\n]+/)
+    .map((d) => d.trim())
+    .filter(Boolean);
+
+  const list = dates.length
+    ? dates
+    : [startDate === endDate ? startDate : `${startDate} – ${endDate}`];
+
+  const perGross = gross / list.length;
+  const perNet = perGross * (1 - commissionPct / 100);
+
+  return list.map((date) => ({
+    media,
+    date,
+    detail,
+    gross: perGross,
+    net: perNet,
+    total: perNet * (1 + VAT_RATE),
+  }));
+}
