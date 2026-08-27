@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.redirect(new URL("/login", request.url));
 
   try {
+    // The token exchange must present the SAME redirect_uri that started the
+    // flow, so this goes through the identical helper.
     const tokens = await exchangeCodeForTokens(code, request.nextUrl.origin);
     const tenants = await fetchTenants(tokens.access_token);
     const tenant = tenants[0];

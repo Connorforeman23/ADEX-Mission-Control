@@ -39,11 +39,19 @@ export function xeroConfigured() {
 }
 
 /**
- * The callback address must match what's registered in the Xero app exactly.
- * Derived from the incoming request so dev previews and production each use
- * their own, rather than hard-coding one and breaking the other.
+ * The callback address, which must match what's registered in the Xero app
+ * EXACTLY or Xero returns "Invalid redirect_uri".
+ *
+ * Prefer an explicit XERO_REDIRECT_URI. Deriving it from the incoming request
+ * seems tidier but is fragile: Vercel gives every deployment its own hostname,
+ * so the value silently changes depending on which preview URL you happen to be
+ * browsing, and stops matching Xero. Setting it explicitly makes it deterministic.
+ *
+ * Falls back to deriving from the origin when unset, so local work still runs.
  */
 export function xeroRedirectUri(origin: string) {
+  const explicit = (process.env.XERO_REDIRECT_URI ?? "").trim();
+  if (explicit) return explicit.replace(/\/$/, "");
   return `${origin.replace(/\/$/, "")}/api/xero/callback`;
 }
 

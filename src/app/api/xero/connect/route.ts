@@ -29,6 +29,12 @@ export async function GET(request: NextRequest) {
 
   const state = crypto.randomUUID();
   const origin = request.nextUrl.origin;
+
+  // Logged so the exact value can be compared against what's registered in Xero
+  // when it complains about the redirect URI. It's a public URL, not a secret.
+  console.log("[xero] browsing origin:", origin);
+  console.log("[xero] sending redirect_uri:", xeroRedirectUri(origin));
+
   const response = NextResponse.redirect(xeroAuthorizeUrl(origin, state));
   response.cookies.set("xero_oauth_state", state, {
     httpOnly: true,
