@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { xeroAuthorizeUrl, xeroConfigured } from "@/lib/xero";
+import { xeroAuthorizeUrl, xeroConfigured, xeroRedirectUri } from "@/lib/xero";
 
 // Starts the Xero connection. Admin-only, and sets a one-time `state` cookie
 // that the callback checks — that's what stops someone tricking an admin into
