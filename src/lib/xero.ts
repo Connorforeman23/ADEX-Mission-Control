@@ -27,16 +27,20 @@ const API_BASE = "https://api.xero.com/api.xro/2.0";
  * Configuration page lists exactly what it may request.
  *
  * What we ask for, and why — nothing wider:
- *   app.connections           — list which Xero organisation we're connected to
  *   accounting.contacts.read  — read the contact list (read-only)
  *   accounting.invoices       — create DRAFT client invoices
  *   offline_access            — refresh the token without re-consenting
+ *
+ * `app.connections` was tried and removed: it is a valid scope (no
+ * "invalid_scope") but Xero answered "access_denied", i.e. it will not grant it
+ * to an uncertified app. The /connections endpoint works with a normal token
+ * anyway, so it was never needed.
  *
  * Override with XERO_SCOPES to experiment without a code change.
  */
 export const XERO_SCOPES = (
   process.env.XERO_SCOPES ??
-  "openid profile email app.connections accounting.contacts.read accounting.invoices offline_access"
+  "openid profile email accounting.contacts.read accounting.invoices offline_access"
 ).trim();
 
 export function xeroClientId() {

@@ -16,8 +16,18 @@ function back(request: NextRequest, message: string) {
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
 
+  // Log everything Xero sent back. "access_denied" on its own says nothing about
+  // WHY, and error_description usually does.
+  console.log("[xero] callback params:", Object.fromEntries(params.entries()));
+
   const error = params.get("error");
-  if (error) return back(request, `Xero refused the connection: ${error}`);
+  if (error) {
+    const detail = params.get("error_description");
+    return back(
+      request,
+      `Xero refused the connection: ${error}${detail ? ` — ${detail}` : ""}`
+    );
+  }
 
   const code = params.get("code");
   const state = params.get("state");
