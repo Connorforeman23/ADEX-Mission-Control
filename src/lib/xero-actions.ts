@@ -18,10 +18,26 @@ export type XeroStatus = {
 
 export async function getXeroStatus(): Promise<XeroStatus> {
   const configured = xeroConfigured();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("xero_status");
-  if (error) {
-    return { configured, connected: false, tenantName: null, connectedAt: null, lastSyncAt: null };
+  const blank = {
+    configured,
+    connected: false,
+    tenantName: null,
+    connectedAt: null,
+    lastSyncAt: null,
+  };
+
+  let data: unknown;
+  try {
+    const res = await createClient().then((c) => c.rpc("xero_status"));
+    if (res.error) {
+      console.error("xero_status", res.error.message);
+      return blank;
+    }
+    data = res.data;
+  } catch (e) {
+    // Never let this throw — a failed status check must not hang the panel.
+    console.error("xero_status", e instanceof Error ? e.message : e);
+    return blank;
   }
   const row = (data as unknown as {
     connected: boolean;

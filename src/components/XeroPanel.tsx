@@ -36,12 +36,31 @@ export default function XeroPanel() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(params.get("xero"));
 
+  // Never leave this spinning: if the check fails, say so rather than sitting
+  // on "Checking the connection…" forever.
   useEffect(() => {
-    getXeroStatus().then(setStatus);
+    getXeroStatus()
+      .then(setStatus)
+      .catch((e: unknown) => {
+        setError(
+          e instanceof Error ? e.message : "Could not check the Xero connection."
+        );
+        setStatus({
+          configured: false,
+          connected: false,
+          tenantName: null,
+          connectedAt: null,
+          lastSyncAt: null,
+        });
+      });
   }, []);
 
   async function refreshStatus() {
-    setStatus(await getXeroStatus());
+    try {
+      setStatus(await getXeroStatus());
+    } catch {
+      /* the panel already shows an error; don't blank the status */
+    }
   }
 
   async function onLoadContacts() {
