@@ -17,17 +17,26 @@ const CONNECTIONS_URL = "https://api.xero.com/connections";
 const API_BASE = "https://api.xero.com/api.xro/2.0";
 
 /**
- * Exactly the set in Xero's own documented example — deliberately minimal.
+ * Xero's NEW GRANULAR SCOPES.
  *
- * accounting.contacts.read was dropped after Xero rejected the request with
- * "invalid_scope": it is a documented scope, but appears to be gated (likely by
- * the app's plan tier). Contacts can be read via accounting.transactions'
- * companions later; proving the connection matters more than reading contacts.
+ * Apps created after 2 March 2026 only have access to the granular scopes; the
+ * old broad ones no longer exist for them. This app is new, so the widely
+ * documented `accounting.transactions` is invalid here and Xero rejects the
+ * whole request with "invalid_scope" — which cost us a long diagnosis, because
+ * every example and guide still shows the broad scope. The app's own
+ * Configuration page lists exactly what it may request.
+ *
+ * What we ask for, and why — nothing wider:
+ *   app.connections           — list which Xero organisation we're connected to
+ *   accounting.contacts.read  — read the contact list (read-only)
+ *   accounting.invoices       — create DRAFT client invoices
+ *   offline_access            — refresh the token without re-consenting
  *
  * Override with XERO_SCOPES to experiment without a code change.
  */
 export const XERO_SCOPES = (
-  process.env.XERO_SCOPES ?? "openid profile email accounting.transactions offline_access"
+  process.env.XERO_SCOPES ??
+  "openid profile email app.connections accounting.contacts.read accounting.invoices offline_access"
 ).trim();
 
 export function xeroClientId() {
