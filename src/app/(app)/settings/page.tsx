@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { requireFullAccess, getMyProfile } from "@/lib/queries";
 import { COMMISSION_RATE, MARGIN_FLOOR, VAT_RATE, initials } from "@/lib/money";
@@ -5,6 +6,7 @@ import { INVOICE_TOLERANCE } from "@/lib/po";
 import { SUPPLIERS_BY_CHANNEL } from "@/lib/reference";
 import TeamAdmin from "@/components/TeamAdmin";
 import ActivityLog from "@/components/ActivityLog";
+import XeroPanel from "@/components/XeroPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +101,12 @@ export default async function SettingsPage() {
       </div>
 
       {isAdmin && <TeamAdmin />}
+
+      {isAdmin && (
+        <Suspense fallback={null}>
+          <XeroPanel />
+        </Suspense>
+      )}
 
       {isAdmin && <ActivityLog />}
 
