@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import CollapsibleCard from "@/components/CollapsibleCard";
 import {
   disconnectXero,
   getXeroStatus,
@@ -95,13 +96,11 @@ export default function XeroPanel() {
   }
 
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Xero</h2>
-        <span className="sub">
-          {status?.connected ? `Connected · ${status.tenantName ?? "—"}` : "Not connected"}
-        </span>
-      </div>
+    <CollapsibleCard
+      id="xero"
+      title="Xero"
+      sub={status?.connected ? `Connected · ${status.tenantName ?? "—"}` : "Not connected"}
+    >
       <div className="card-body">
         {error && <p style={{ color: "var(--crit)", fontSize: 12.5, marginBottom: 12 }}>{error}</p>}
         {notice && <p style={{ color: "var(--ok)", fontSize: 12.5, marginBottom: 12 }}>{notice}</p>}
@@ -180,6 +179,6 @@ export default function XeroPanel() {
           </>
         )}
       </div>
-    </section>
+    </CollapsibleCard>
   );
 }

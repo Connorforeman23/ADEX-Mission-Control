@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import CollapsibleCard from "@/components/CollapsibleCard";
 import { initials } from "@/lib/money";
 
 // Admin-only team management. Backed entirely by the admin_* security-definer
@@ -138,11 +139,7 @@ export default function TeamAdmin() {
   }
 
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Manage team</h2>
-        <span className="sub">{rows.length} on the staff list</span>
-      </div>
+    <CollapsibleCard id="manage-team" title="Manage team" sub={`${rows.length} on the staff list`}>
       <div className="card-body">
         {error && <p style={{ color: "var(--crit)", fontSize: 12.5, marginBottom: 12 }}>{error}</p>}
         {notice && <p style={{ color: "var(--ok)", fontSize: 12.5, marginBottom: 12 }}>{notice}</p>}
@@ -249,6 +246,6 @@ export default function TeamAdmin() {
           </p>
         </form>
       </div>
-    </section>
+    </CollapsibleCard>
   );
 }

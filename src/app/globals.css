@@ -234,6 +234,35 @@ tbody tr:hover { background: var(--blue-wash); }
 .card-head .sub { font-size: 11.5px; color: var(--faint); }
 .card-body { padding: 14px 16px 16px; }
 
+/* Cards sitting straight on a page need their own spacing — the ones inside
+   .cols get it from the grid gap, which is why stacked cards used to touch. */
+.page > .card { margin-bottom: 14px; }
+
+/* Minimise / expand control on a collapsible card. */
+.card-toggle {
+  margin-left: auto;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  flex: none;
+}
+.card-toggle:hover { background: var(--surface-2); color: var(--text); }
+.card-toggle svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Collapsed: the head alone, with its usual bottom padding restored. */
+.card.is-collapsed .card-head { padding-bottom: 12px; }
+
 .empty-note { margin: 0; color: var(--faint); font-size: 12.5px; line-height: 1.6; }
 
 /* ---- tables ---- */

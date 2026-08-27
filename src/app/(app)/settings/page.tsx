@@ -7,6 +7,7 @@ import { SUPPLIERS_BY_CHANNEL } from "@/lib/reference";
 import TeamAdmin from "@/components/TeamAdmin";
 import ActivityLog from "@/components/ActivityLog";
 import XeroPanel from "@/components/XeroPanel";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export const dynamic = "force-dynamic";
 
@@ -45,11 +46,7 @@ export default async function SettingsPage() {
       </div>
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Team</h2>
-            <span className="sub">{members.length} signed up</span>
-          </div>
+        <CollapsibleCard id="team" title="Team" sub={`${members.length} signed up`}>
           <div className="card-body">
             {members.length === 0 ? (
               <p className="empty-note">Nobody has signed up yet.</p>
@@ -73,13 +70,9 @@ export default async function SettingsPage() {
               first — sign-up is refused for anyone not on it.
             </p>
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Commission defaults</h2>
-            <span className="sub">Supplier gross less…</span>
-          </div>
+        <CollapsibleCard id="commission" title="Commission defaults" sub="Supplier gross less…">
           <div className="card-body">
             <div className="rows">
               {COMMISSION_ROWS.map(([channel, rate]) => (
@@ -97,7 +90,7 @@ export default async function SettingsPage() {
               on the net.
             </p>
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
       {isAdmin && <TeamAdmin />}
@@ -111,11 +104,7 @@ export default async function SettingsPage() {
       {isAdmin && <ActivityLog />}
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Rules</h2>
-            <span className="sub">Applied across the app</span>
-          </div>
+        <CollapsibleCard id="rules" title="Rules" sub="Applied across the app">
           <div className="card-body">
             <div className="rows">
               <div className="row">
@@ -141,13 +130,9 @@ export default async function SettingsPage() {
               </div>
             </div>
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Connections</h2>
-            <span className="sub">None live yet</span>
-          </div>
+        <CollapsibleCard id="connections" title="Connections" sub="None live yet">
           <div className="card-body">
             <div className="rows">
               {[
@@ -169,14 +154,14 @@ export default async function SettingsPage() {
               Each of these is a real integration to build — nothing here is wired up yet.
             </p>
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Supplier rosters</h2>
-          <span className="sub">Offered in the booking form, per channel</span>
-        </div>
+      <CollapsibleCard
+        id="rosters"
+        title="Supplier rosters"
+        sub="Offered in the booking form, per channel"
+      >
         <div className="card-body">
           <div className="rows">
             {Object.entries(SUPPLIERS_BY_CHANNEL).map(([channel, list]) => (
@@ -190,7 +175,7 @@ export default async function SettingsPage() {
             ))}
           </div>
         </div>
-      </section>
+      </CollapsibleCard>
     </div>
   );
 }
