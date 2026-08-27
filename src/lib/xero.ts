@@ -16,14 +16,17 @@ const TOKEN_URL = "https://identity.xero.com/connect/token";
 const CONNECTIONS_URL = "https://api.xero.com/connections";
 const API_BASE = "https://api.xero.com/api.xro/2.0";
 
-/** Read contacts and manage invoices/bills, plus a refresh token. Nothing more. */
+/**
+ * Read contacts and manage invoices/bills, plus a refresh token. Nothing more.
+ * Ordered as Xero's own documentation lists them.
+ */
 export const XERO_SCOPES = [
   "openid",
   "profile",
   "email",
-  "offline_access",
-  "accounting.contacts.read",
   "accounting.transactions",
+  "accounting.contacts.read",
+  "offline_access",
 ].join(" ");
 
 export function xeroClientId() {
@@ -63,7 +66,10 @@ export function xeroAuthorizeUrl(origin: string, state: string) {
     scope: XERO_SCOPES,
     state,
   });
-  return `${AUTHORIZE_URL}?${params.toString()}`;
+  // URLSearchParams encodes spaces as "+", but Xero expects "%20" in the scope
+  // list and rejects the request with "invalid_scope" otherwise. None of the
+  // other values can contain a literal "+", so replacing globally is safe.
+  return `${AUTHORIZE_URL}?${params.toString().replace(/\+/g, "%20")}`;
 }
 
 function basicAuthHeader() {

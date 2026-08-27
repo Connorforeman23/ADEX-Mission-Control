@@ -35,7 +35,12 @@ export async function GET(request: NextRequest) {
   console.log("[xero] browsing origin:", origin);
   console.log("[xero] sending redirect_uri:", xeroRedirectUri(origin));
 
-  const response = NextResponse.redirect(xeroAuthorizeUrl(origin, state));
+  const authorizeUrl = xeroAuthorizeUrl(origin, state);
+  // Full URL logged (minus nothing sensitive — the client id is public) so a
+  // rejection from Xero can be diagnosed from the exact request we made.
+  console.log("[xero] authorize url:", authorizeUrl);
+
+  const response = NextResponse.redirect(authorizeUrl);
   response.cookies.set("xero_oauth_state", state, {
     httpOnly: true,
     secure: true,
