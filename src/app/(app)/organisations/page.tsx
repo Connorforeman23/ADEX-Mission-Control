@@ -6,7 +6,12 @@ export const dynamic = "force-dynamic";
 
 // Phase 3: the company-level view. One row per real company, showing both sides
 // of the relationship — an organisation can be a client and a supplier at once.
-export default async function OrganisationsPage() {
+export default async function OrganisationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lens?: string }>;
+}) {
+  const { lens } = await searchParams;
   const [rows, staff] = await Promise.all([getOrganisations(), getSalesTeam()]);
   const live = rows.filter((r) => !r.archived);
 
@@ -62,7 +67,13 @@ export default async function OrganisationsPage() {
         </div>
       </div>
 
-      <OrganisationTable rows={rows} staff={staff} />
+      <OrganisationTable
+        rows={rows}
+        staff={staff}
+        initialLens={
+          lens === "clients" || lens === "prospects" || lens === "suppliers" ? lens : "all"
+        }
+      />
     </div>
   );
 }

@@ -19,6 +19,8 @@ export type OrganisationRow = {
   profit: number;
   margin: number;
   supplier_spend: number;
+  /** Channels booked for this client, shown as pills on the card view. */
+  channels: string[];
 };
 
 /** The customer lifecycle, in the words the team uses. */

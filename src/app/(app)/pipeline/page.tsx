@@ -19,7 +19,7 @@ type LeadRecord = {
 export default async function PipelinePage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; org?: string }>;
 }) {
   const supabase = await createClient();
   const [{ data: leadRows }, { data: staff }, params] = await Promise.all([
@@ -86,7 +86,7 @@ export default async function PipelinePage({
         </div>
       </div>
 
-      <PipelineBoard leads={leads} staff={staff ?? []} openNew={params.new === "1"} />
+      <PipelineBoard leads={leads} staff={staff ?? []} openNew={params.new === "1"} prefillOrg={params.org ?? ""} />
     </div>
   );
 }

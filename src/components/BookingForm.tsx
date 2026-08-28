@@ -58,15 +58,18 @@ export default function BookingForm({
   staff,
   editing,
   onDone,
+  prefillClient = "",
 }: {
   clients: { id: string; name: string }[];
   staff: { id: string; full_name: string }[];
   editing?: EditingCampaign;
   onDone?: () => void;
+  /** Client carried through from an organisation page. */
+  prefillClient?: string;
 }) {
   const router = useRouter();
   const [name, setName] = useState(editing?.name ?? "");
-  const [clientName, setClientName] = useState(editing?.clientName ?? "");
+  const [clientName, setClientName] = useState(editing?.clientName ?? prefillClient);
   const [newClient, setNewClient] = useState("");
   const [ownerId, setOwnerId] = useState(editing?.ownerId || staff[0]?.id || "");
   const [status, setStatus] = useState(editing?.status ?? "planning");

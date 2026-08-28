@@ -25,7 +25,7 @@ type Raw = {
 export default async function ContactsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; org?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -112,6 +112,7 @@ export default async function ContactsPage({
         organisations={orgs ?? []}
         meId={user?.id ?? ""}
         openNew={params.new === "1"}
+        prefillOrg={params.org ?? ""}
       />
     </div>
   );

@@ -54,15 +54,20 @@ export default function PipelineBoard({
   leads,
   staff,
   openNew,
+  prefillOrg = "",
 }: {
   leads: LeadRow[];
   staff: { id: string; full_name: string }[];
   openNew?: boolean;
+  /** Company carried through from an organisation page. */
+  prefillOrg?: string;
 }) {
   const router = useRouter();
   const [owner, setOwner] = useState("All");
   const [view, setView] = useState<"board" | "list" | "forecast">("board");
-  const [editing, setEditing] = useState<LeadInput | null>(openNew ? blank(staff[0]?.id ?? "") : null);
+  const [editing, setEditing] = useState<LeadInput | null>(
+    openNew ? { ...blank(staff[0]?.id ?? ""), name: prefillOrg } : null
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

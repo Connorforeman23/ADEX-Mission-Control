@@ -231,7 +231,7 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     supabase.from("contacts").select("organisation_id"),
     supabase
       .from("campaigns")
-      .select("id, fee, client_org_id, campaign_lines ( client_charge, supplier_net )"),
+      .select("id, fee, client_org_id, campaign_lines ( client_charge, supplier_net, channel )"),
     supabase.from("campaign_lines").select("supplier_org_id, supplier_net"),
   ]);
 
@@ -255,13 +255,14 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     if (c.organisation_id) contactCount.set(c.organisation_id, (contactCount.get(c.organisation_id) ?? 0) + 1);
   }
 
+  const channels = new Map<string, Set<string>>();
   const campaignCount = new Map<string, number>();
   const billings = new Map<string, number>();
   const cost = new Map<string, number>();
   type CampRaw = {
     client_org_id: string | null;
     fee: number;
-    campaign_lines: { client_charge: number; supplier_net: number }[];
+    campaign_lines: { client_charge: number; supplier_net: number; channel: string }[];
   };
   for (const c of (campaignsRes.data ?? []) as unknown as CampRaw[]) {
     if (!c.client_org_id) continue;
@@ -271,6 +272,9 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     const net = lines.reduce((a, l) => a + Number(l.supplier_net), 0);
     billings.set(c.client_org_id, (billings.get(c.client_org_id) ?? 0) + value);
     cost.set(c.client_org_id, (cost.get(c.client_org_id) ?? 0) + net);
+    const set = channels.get(c.client_org_id) ?? new Set<string>();
+    lines.forEach((l) => l.channel && set.add(l.channel));
+    channels.set(c.client_org_id, set);
   }
 
   const spend = new Map<string, number>();
@@ -296,6 +300,7 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
       profit,
       margin: gross ? (profit / gross) * 100 : 0,
       supplier_spend: spend.get(o.id) ?? 0,
+      channels: [...(channels.get(o.id) ?? [])],
     };
   });
 }

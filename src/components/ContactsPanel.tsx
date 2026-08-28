@@ -53,6 +53,7 @@ export default function ContactsPanel({
   organisations,
   meId,
   openNew,
+  prefillOrg = "",
 }: {
   contacts: ContactRow[];
   staff: { id: string; full_name: string }[];
@@ -60,12 +61,16 @@ export default function ContactsPanel({
   organisations: { id: string; name: string }[];
   meId: string;
   openNew?: boolean;
+  /** Company carried through from an organisation page. */
+  prefillOrg?: string;
 }) {
   const router = useRouter();
   const [owner, setOwner] = useState("All");
   const [status, setStatus] = useState("All");
   const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<ContactInput | null>(openNew ? blank(meId) : null);
+  const [editing, setEditing] = useState<ContactInput | null>(
+    openNew ? { ...blank(meId), organisation: prefillOrg } : null
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

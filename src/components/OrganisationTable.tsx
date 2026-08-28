@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Segmented from "@/components/Segmented";
 import OrganisationEditor, { blankOrganisation } from "@/components/OrganisationEditor";
-import { gbp, MARGIN_FLOOR } from "@/lib/money";
+import { channelLabel, gbp, MARGIN_FLOOR } from "@/lib/money";
 import { CUSTOMER_STATUS_LABEL, type OrganisationRow } from "@/lib/organisations";
 
 // Every company in one list. A company can be a customer and a supplier at the
@@ -29,12 +29,16 @@ const STATUS_COLOUR: Record<string, string | undefined> = {
 export default function OrganisationTable({
   rows,
   staff,
+  initialLens = "all",
 }: {
   rows: OrganisationRow[];
   staff: { id: string; full_name: string }[];
+  /** Set by /clients, which now redirects here filtered to clients. */
+  initialLens?: Lens;
 }) {
   const [creating, setCreating] = useState(false);
-  const [lens, setLens] = useState<Lens>("all");
+  const [view, setView] = useState<"cards" | "table">("cards");
+  const [lens, setLens] = useState<Lens>(initialLens);
   const [owner, setOwner] = useState("All");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -83,19 +87,116 @@ export default function OrganisationTable({
             Show archived
           </label>
           <Segmented value={lens} onChange={setLens} options={LENSES} />
+          <Segmented
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "cards" as const, label: "Cards" },
+              { value: "table" as const, label: "Table" },
+            ]}
+          />
           <button className="btn btn-primary" onClick={() => setCreating(true)}>
             New organisation
           </button>
         </div>
       </div>
 
-      <section className="card">
-        <div className="card-body" style={{ padding: 0 }}>
-          {filtered.length === 0 ? (
-            <p className="empty-note" style={{ padding: 18 }}>
-              No organisations match that view.
+      {filtered.length === 0 ? (
+        <section className="card">
+          <div className="card-body">
+            <p className="empty-note">
+              {rows.length === 0
+                ? "No organisations yet. Add one, or they appear automatically when you book a campaign or log an opportunity."
+                : "No organisations match that view."}
             </p>
-          ) : (
+          </div>
+        </section>
+      ) : view === "cards" ? (
+        <div className="client-grid">
+          {filtered.map((r) => {
+            const low = r.billings > 0 && r.margin < MARGIN_FLOOR;
+            return (
+              <article className="card" style={{ padding: "15px 16px" }} key={r.id}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="strong" style={{ fontSize: 14 }}>
+                      <Link href={`/organisations/${r.id}`} style={{ color: "inherit" }}>
+                        {r.name}
+                      </Link>
+                    </div>
+                    <div className="sub-line">
+                      {r.sector}
+                      {r.is_supplier && " · Supplier"}
+                      {r.archived && " · Archived"}
+                    </div>
+                  </div>
+                  <span
+                    className={`st ${
+                      r.customer_status === "active_client"
+                        ? "live"
+                        : r.customer_status === "prospect"
+                          ? "planning"
+                          : "done"
+                    }`}
+                  >
+                    {CUSTOMER_STATUS_LABEL[r.customer_status] ?? r.customer_status}
+                  </span>
+                </div>
+
+                {/* Clients get the commercial figures; supplier-only companies
+                    get what we spend with them instead. */}
+                {r.billings > 0 ? (
+                  <div className="client-figures">
+                    <div>
+                      <div className="eyebrow">Billings</div>
+                      <div className="num strong">{gbp(r.billings)}</div>
+                    </div>
+                    <div>
+                      <div className="eyebrow">Profit</div>
+                      <div className="num strong">{gbp(r.profit)}</div>
+                    </div>
+                    <div>
+                      <div className="eyebrow">Margin</div>
+                      <div className="num strong" style={{ color: low ? "var(--crit)" : "var(--ok)" }}>
+                        {r.margin.toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                ) : r.supplier_spend > 0 ? (
+                  <div className="client-figures">
+                    <div>
+                      <div className="eyebrow">Supplier spend</div>
+                      <div className="num strong">{gbp(r.supplier_spend)}</div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {r.channels.length > 0 && (
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 10 }}>
+                    {r.channels.map((ch) => (
+                      <span className="pill" key={ch}>
+                        {channelLabel(ch)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="client-foot">
+                  <small className="sub-line">{r.owner}</small>
+                  <small className="sub-line">
+                    {r.campaigns
+                      ? `${r.campaigns} campaign${r.campaigns === 1 ? "" : "s"}`
+                      : "No campaigns"}
+                    {r.contacts ? ` · ${r.contacts} contact${r.contacts === 1 ? "" : "s"}` : ""}
+                  </small>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <section className="card">
+          <div className="card-body" style={{ padding: 0 }}>
             <div className="table-wrap">
               <table>
                 <thead>
@@ -149,9 +250,9 @@ export default function OrganisationTable({
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
       <OrganisationEditor
         open={creating}
