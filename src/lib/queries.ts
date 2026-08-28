@@ -307,7 +307,7 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
   const { data: org, error } = await supabase
     .from("organisations")
     .select(
-      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, profiles ( full_name )"
+      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, owner_id, address_line1, address_line2, city, postcode, country, phone, notes, profiles ( full_name )"
     )
     .eq("id", id)
     .maybeSingle();
@@ -356,6 +356,14 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
     archived: Boolean(o.archived),
     companies_house_no: (o.companies_house_no as string | null) ?? null,
     website: (o.website as string | null) ?? null,
+    ownerId: (o.owner_id as string | null) ?? null,
+    addressLine1: (o.address_line1 as string | null) ?? null,
+    addressLine2: (o.address_line2 as string | null) ?? null,
+    city: (o.city as string | null) ?? null,
+    postcode: (o.postcode as string | null) ?? null,
+    country: (o.country as string | null) ?? null,
+    phone: (o.phone as string | null) ?? null,
+    notes: (o.notes as string | null) ?? null,
 
     contacts: ((contactsRes.data ?? []) as unknown as {
       id: string; first_name: string; last_name: string | null;

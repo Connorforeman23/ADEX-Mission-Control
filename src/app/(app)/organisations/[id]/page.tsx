@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getOrganisation } from "@/lib/queries";
+import { getOrganisation, getSalesTeam } from "@/lib/queries";
 import { CUSTOMER_STATUS_LABEL } from "@/lib/organisations";
 import { dateGB, gbp, rangeGB, STATUS_LABEL } from "@/lib/money";
+import OrganisationActions from "@/components/OrganisationActions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function OrganisationPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const org = await getOrganisation(id);
+  const [org, staff] = await Promise.all([getOrganisation(id), getSalesTeam()]);
   if (!org) notFound();
 
   const billings = org.campaigns.reduce((a, c) => a + c.value, 0);
@@ -40,7 +41,21 @@ export default async function OrganisationPage({
             {` · Owner: ${org.owner}`}
             {org.archived && " · Archived"}
           </p>
+          {(org.addressLine1 || org.phone || org.website) && (
+            <p className="sub-line">
+              {[
+                [org.addressLine1, org.addressLine2, org.city, org.postcode, org.country]
+                  .filter(Boolean)
+                  .join(", "),
+                org.phone,
+                org.website,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
         </div>
+        <OrganisationActions org={org} staff={staff} />
       </div>
 
       <div className="kpis">

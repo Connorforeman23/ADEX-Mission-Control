@@ -874,3 +874,89 @@ export async function saveSpaceOrderDetails(
   revalidatePath("/finance");
   return {};
 }
+
+// --- organisations -------------------------------------------------------
+
+export type OrganisationInput = {
+  id?: string;
+  name: string;
+  sector: string;
+  ownerId: string;
+  isSupplier: boolean;
+  customerStatus: string;
+  /** Reason for a status change — recorded in the organisation's history. */
+  statusReason: string;
+  companiesHouseNo: string;
+  website: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  postcode: string;
+  country: string;
+  phone: string;
+  notes: string;
+  archived: boolean;
+};
+
+/** Create or update an organisation, recording any status change with its reason. */
+export async function saveOrganisation(input: OrganisationInput) {
+  const supabase = await createClient();
+  const { user, role } = await meWithRole(supabase);
+  if (!user) return { error: "You need to be signed in." };
+
+  const name = input.name.trim();
+  if (!name) return { error: "Give the organisation a name." };
+
+  const row = {
+    name,
+    sector: input.sector.trim() || null,
+    owner_id: ownerFor(role, user.id, input.ownerId),
+    is_supplier: input.isSupplier,
+    companies_house_no: input.companiesHouseNo.trim() || null,
+    website: input.website.trim() || null,
+    address_line1: input.addressLine1.trim() || null,
+    address_line2: input.addressLine2.trim() || null,
+    city: input.city.trim() || null,
+    postcode: input.postcode.trim() || null,
+    country: input.country.trim() || null,
+    phone: input.phone.trim() || null,
+    notes: input.notes.trim() || null,
+    archived: input.archived,
+  };
+
+  let id = input.id;
+
+  if (id) {
+    const { error } = await supabase.from("organisations").update(row).eq("id", id);
+    if (error) return { error: error.message };
+  } else {
+    const { data, error } = await supabase
+      .from("organisations")
+      .insert({ ...row, customer_status: input.customerStatus })
+      .select("id")
+      .single();
+    if (error) {
+      return {
+        error: /duplicate|unique/i.test(error.message)
+          ? `An organisation called "${name}" already exists.`
+          : error.message,
+      };
+    }
+    id = data.id as string;
+  }
+
+  // Status goes through the dedicated function so the change is recorded with
+  // its reason, rather than silently overwriting the previous value.
+  if (input.id) {
+    const { error } = await supabase.rpc("set_organisation_status", {
+      p_org: id,
+      p_status: input.customerStatus,
+      p_reason: input.statusReason.trim() || null,
+    });
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/organisations");
+  revalidatePath(`/organisations/${id}`);
+  return { id };
+}

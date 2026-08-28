@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Segmented from "@/components/Segmented";
+import OrganisationEditor, { blankOrganisation } from "@/components/OrganisationEditor";
 import { gbp, MARGIN_FLOOR } from "@/lib/money";
 import { CUSTOMER_STATUS_LABEL, type OrganisationRow } from "@/lib/organisations";
 
@@ -25,7 +26,14 @@ const STATUS_COLOUR: Record<string, string | undefined> = {
   none: undefined,
 };
 
-export default function OrganisationTable({ rows }: { rows: OrganisationRow[] }) {
+export default function OrganisationTable({
+  rows,
+  staff,
+}: {
+  rows: OrganisationRow[];
+  staff: { id: string; full_name: string }[];
+}) {
+  const [creating, setCreating] = useState(false);
   const [lens, setLens] = useState<Lens>("all");
   const [owner, setOwner] = useState("All");
   const [search, setSearch] = useState("");
@@ -75,6 +83,9 @@ export default function OrganisationTable({ rows }: { rows: OrganisationRow[] })
             Show archived
           </label>
           <Segmented value={lens} onChange={setLens} options={LENSES} />
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            New organisation
+          </button>
         </div>
       </div>
 

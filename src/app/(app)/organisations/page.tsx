@@ -1,4 +1,4 @@
-import { getOrganisations } from "@/lib/queries";
+import { getOrganisations, getSalesTeam } from "@/lib/queries";
 import { gbpK, MARGIN_FLOOR } from "@/lib/money";
 import OrganisationTable from "@/components/OrganisationTable";
 
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // Phase 3: the company-level view. One row per real company, showing both sides
 // of the relationship — an organisation can be a client and a supplier at once.
 export default async function OrganisationsPage() {
-  const rows = await getOrganisations();
+  const [rows, staff] = await Promise.all([getOrganisations(), getSalesTeam()]);
   const live = rows.filter((r) => !r.archived);
 
   const clients = live.filter((r) => r.customer_status === "active_client").length;
@@ -62,7 +62,7 @@ export default async function OrganisationsPage() {
         </div>
       </div>
 
-      <OrganisationTable rows={rows} />
+      <OrganisationTable rows={rows} staff={staff} />
     </div>
   );
 }

@@ -88,6 +88,14 @@ export type OrganisationDetail = {
   archived: boolean;
   companies_house_no: string | null;
   website: string | null;
+  ownerId: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  postcode: string | null;
+  country: string | null;
+  phone: string | null;
+  notes: string | null;
   contacts: OrgContact[];
   opportunities: OrgOpportunity[];
   campaigns: OrgCampaign[];
