@@ -851,7 +851,7 @@ export async function updateCampaignStatus(id: string, status: string) {
  * Space Order gives the same document rather than a blank one.
  */
 export async function saveSpaceOrderDetails(
-  lineId: string,
+  orderId: string,
   supplierContact: string,
   orderNotes: string
 ) {
@@ -860,16 +860,17 @@ export async function saveSpaceOrderDetails(
   if (!user) return { error: "You need to be signed in." };
   if (role === "restricted") return { error: RESTRICTED_NO_BOOKING };
 
+  // These live on the order, not the line — one order can cover several lines.
   const { error } = await supabase
-    .from("campaign_lines")
+    .from("space_orders")
     .update({
       supplier_contact: supplierContact.trim() || null,
       order_notes: orderNotes.trim() || null,
     })
-    .eq("id", lineId);
+    .eq("id", orderId);
 
   if (error) return { error: error.message };
-  revalidatePath(`/space-orders/${lineId}`);
+  revalidatePath(`/space-orders/${orderId}`);
   revalidatePath("/finance");
   return {};
 }

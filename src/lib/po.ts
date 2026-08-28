@@ -10,6 +10,8 @@ export const SOLD_STATUSES = ["booked", "live", "risk", "done"];
 export type PurchaseOrder = {
   po: string;
   lineId: string;
+  /** The Space Order this line belongs to (one per supplier per campaign). */
+  spaceOrderId: string | null;
   campaignId: string;
   campaignRef: string;
   campaignName: string;
@@ -61,6 +63,7 @@ export function buildPurchaseOrders(campaigns: Campaign[]): PurchaseOrder[] {
       // campaigns booked before numbering existed.
       po: l.supplier_po ?? code + String(n).padStart(4, "0"),
       lineId: l.id,
+      spaceOrderId: l.space_order_id ?? null,
       campaignId: c.id,
       campaignRef: c.ref,
       campaignName: c.name,

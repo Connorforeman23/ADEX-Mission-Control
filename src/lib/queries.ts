@@ -24,7 +24,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
        profiles ( full_name ),
        campaign_lines ( id, channel, vendor, detail, line_type, start_date, end_date, selected_dates,
                         cpt, ooh_format, ooh_disp_type, copy_instruction, urn, supplier_po,
-                        supplier_gross, supplier_net, client_charge )`
+                        supplier_gross, supplier_net, client_charge, space_order_id )`
     )
     .order("start_date", { ascending: false, nullsFirst: false });
 
@@ -420,47 +420,39 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
   };
 }
 
-/** Everything needed to render one Space Order. */
-export async function getSpaceOrder(lineId: string): Promise<SpaceOrder | null> {
+
+/**
+ * One Space Order — every booking line for a single supplier on a campaign.
+ *
+ * Per Rick: the order is per SUPPLIER, not per line. ITV1 and ITVQuiz are
+ * separate lines at different rates but go on one order to ITV.
+ */
+export async function getSpaceOrder(orderId: string): Promise<SpaceOrder | null> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("campaign_lines")
+  const { data: order, error } = await supabase
+    .from("space_orders")
     .select(
-      `id, channel, vendor, detail, selected_dates, start_date, end_date, supplier_po,
-       supplier_contact, order_notes, supplier_gross, commission_pct, copy_instruction, urn,
-       ooh_format, ooh_disp_type, supplier_org_id,
+      `id, campaign_id, supplier_org_id, supplier_name, order_number, supplier_contact, order_notes,
        campaigns ( ref, name, clients ( name ), profiles ( full_name, email ) )`
     )
-    .eq("id", lineId)
+    .eq("id", orderId)
     .maybeSingle();
 
-  // Log rather than fail silently: a missing column or an RLS refusal both
-  // surface as a bare 404, which explains nothing.
   if (error) {
     console.error("getSpaceOrder", error.message);
     return null;
   }
-  if (!data) return null;
+  if (!order) return null;
 
-  type Raw = {
+  type OrderRaw = {
     id: string;
-    channel: string;
-    vendor: string;
-    detail: string | null;
-    selected_dates: string | null;
-    start_date: string;
-    end_date: string;
-    supplier_po: string | null;
+    campaign_id: string;
+    supplier_org_id: string | null;
+    supplier_name: string;
+    order_number: string | null;
     supplier_contact: string | null;
     order_notes: string | null;
-    supplier_gross: number;
-    commission_pct: number;
-    copy_instruction: string | null;
-    urn: string | null;
-    ooh_format: string | null;
-    ooh_disp_type: string | null;
-    supplier_org_id: string | null;
     campaigns: {
       ref: string;
       name: string;
@@ -468,55 +460,95 @@ export async function getSpaceOrder(lineId: string): Promise<SpaceOrder | null> 
       profiles: { full_name: string; email: string } | null;
     } | null;
   };
-  const l = data as unknown as Raw;
+  const o = order as unknown as OrderRaw;
 
-  // Offer the people already saved against this supplier for the "To:" line.
+  const { data: lineData } = await supabase
+    .from("campaign_lines")
+    .select(
+      `id, channel, vendor, detail, selected_dates, start_date, end_date,
+       supplier_gross, commission_pct, copy_instruction, urn, ooh_format, ooh_disp_type`
+    )
+    .eq("space_order_id", orderId)
+    .order("start_date");
+
+  type LineRaw = {
+    id: string;
+    channel: string;
+    vendor: string;
+    detail: string | null;
+    selected_dates: string | null;
+    start_date: string;
+    end_date: string;
+    supplier_gross: number;
+    commission_pct: number;
+    copy_instruction: string | null;
+    urn: string | null;
+    ooh_format: string | null;
+    ooh_disp_type: string | null;
+  };
+  const lines = (lineData ?? []) as unknown as LineRaw[];
+
+  // Every line on the order becomes its own set of dated rows.
+  const rows = lines.flatMap((l) => {
+    const detail =
+      l.channel === "OOH" && l.ooh_format
+        ? `${l.detail ?? ""}${l.detail ? " · " : ""}${l.ooh_format} (${l.ooh_disp_type ?? "Static"})`
+        : l.detail ?? "";
+    return spaceOrderRows(
+      l.vendor,
+      detail,
+      l.selected_dates,
+      l.start_date,
+      l.end_date,
+      Number(l.supplier_gross),
+      Number(l.commission_pct)
+    );
+  });
+
+  const gross = lines.reduce((a, l) => a + Number(l.supplier_gross), 0);
+  const net = lines.reduce(
+    (a, l) => a + Number(l.supplier_gross) * (1 - Number(l.commission_pct) / 100),
+    0
+  );
+  const vat = net * VAT_RATE;
+
+  // Commission is per line; show a single figure when they agree, a range when
+  // they don't, rather than quietly implying one rate applies to everything.
+  const rates = [...new Set(lines.map((l) => Number(l.commission_pct)))];
+  const commissionPct = rates.length === 1 ? rates[0] : Math.max(...rates);
+
+  const copies = [...new Set(lines.map((l) =>
+    l.urn ? `${l.copy_instruction ?? "New Copy"} · URN ${l.urn}` : l.copy_instruction ?? "New Copy"
+  ))];
+
   let contacts: { id: string; name: string }[] = [];
-  if (l.supplier_org_id) {
+  if (o.supplier_org_id) {
     const { data: people } = await supabase
       .from("contacts")
       .select("id, first_name, last_name")
-      .eq("organisation_id", l.supplier_org_id)
+      .eq("organisation_id", o.supplier_org_id)
       .order("first_name");
     contacts = ((people ?? []) as { id: string; first_name: string; last_name: string | null }[]).map(
       (p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(" ") })
     );
   }
 
-  const detail =
-    l.channel === "OOH" && l.ooh_format
-      ? `${l.detail ?? ""}${l.detail ? " · " : ""}${l.ooh_format} (${l.ooh_disp_type ?? "Static"})`
-      : l.detail ?? "";
-
-  const gross = Number(l.supplier_gross);
-  const commissionPct = Number(l.commission_pct);
-  const net = gross * (1 - commissionPct / 100);
-  const vat = net * VAT_RATE;
-
-  const rows = spaceOrderRows(
-    l.vendor,
-    detail,
-    l.selected_dates,
-    l.start_date,
-    l.end_date,
-    gross,
-    commissionPct
-  );
-
   return {
-    lineId: l.id,
-    po: l.supplier_po ?? "—",
-    supplier: l.vendor,
-    supplierOrgId: l.supplier_org_id,
-    supplierContact: l.supplier_contact ?? "",
-    fromName: l.campaigns?.profiles?.full_name ?? "—",
-    fromEmail: l.campaigns?.profiles?.email ?? "",
+    lineId: o.id,
+    po: o.order_number ?? "—",
+    supplier: o.supplier_name,
+    supplierOrgId: o.supplier_org_id,
+    supplierContact: o.supplier_contact ?? "",
+    fromName: o.campaigns?.profiles?.full_name ?? "—",
+    fromEmail: o.campaigns?.profiles?.email ?? "",
     date: new Date().toISOString().slice(0, 10),
-    client: l.campaigns?.clients?.name ?? "—",
-    summary: `${l.vendor}${rows.length > 1 ? ` x${rows.length}` : ""}${detail ? ` — ${detail}` : ""}`,
+    client: o.campaigns?.clients?.name ?? "—",
+    summary: `${o.supplier_name}${rows.length > 1 ? ` x${rows.length}` : ""}${
+      lines.length > 1 ? ` · ${lines.length} lines` : ""
+    }`,
     commissionPct,
-    copy: l.urn ? `${l.copy_instruction ?? "New Copy"} · URN ${l.urn}` : l.copy_instruction ?? "New Copy",
-    orderNotes: l.order_notes ?? "",
+    copy: copies.join(" / "),
+    orderNotes: o.order_notes ?? "",
     rows,
     gross,
     net,
