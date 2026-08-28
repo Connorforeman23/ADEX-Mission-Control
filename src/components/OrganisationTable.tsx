@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
 import OrganisationEditor, { blankOrganisation } from "@/components/OrganisationEditor";
 import { channelLabel, gbp, MARGIN_FLOOR } from "@/lib/money";
@@ -17,6 +18,24 @@ const LENSES: { value: Lens; label: string }[] = [
   { value: "prospects", label: "Prospects" },
   { value: "suppliers", label: "Suppliers" },
 ];
+
+// Short badge text — the full labels ("No customer relationship") are far too
+// long for a card pill.
+const STATUS_BADGE: Record<string, string> = {
+  active_client: "Live",
+  prospect: "Prospect",
+  former_client: "Former",
+  not_pursuing: "Not pursuing",
+  none: "Supplier",
+};
+
+const STATUS_CLASS: Record<string, string> = {
+  active_client: "live",
+  prospect: "planning",
+  former_client: "done",
+  not_pursuing: "risk",
+  none: "done",
+};
 
 const STATUS_COLOUR: Record<string, string | undefined> = {
   active_client: "var(--ok)",
@@ -130,46 +149,27 @@ export default function OrganisationTable({
                       {r.archived && " · Archived"}
                     </div>
                   </div>
-                  <span
-                    className={`st ${
-                      r.customer_status === "active_client"
-                        ? "live"
-                        : r.customer_status === "prospect"
-                          ? "planning"
-                          : "done"
-                    }`}
-                  >
-                    {CUSTOMER_STATUS_LABEL[r.customer_status] ?? r.customer_status}
+                  <span className={`st ${STATUS_CLASS[r.customer_status] ?? "done"}`}>
+                    {STATUS_BADGE[r.customer_status] ?? r.customer_status}
                   </span>
                 </div>
 
-                {/* Clients get the commercial figures; supplier-only companies
-                    get what we spend with them instead. */}
-                {r.billings > 0 ? (
-                  <div className="client-figures">
-                    <div>
-                      <div className="eyebrow">Billings</div>
-                      <div className="num strong">{gbp(r.billings)}</div>
-                    </div>
-                    <div>
-                      <div className="eyebrow">Profit</div>
-                      <div className="num strong">{gbp(r.profit)}</div>
-                    </div>
-                    <div>
-                      <div className="eyebrow">Margin</div>
-                      <div className="num strong" style={{ color: low ? "var(--crit)" : "var(--ok)" }}>
-                        {r.margin.toFixed(1)}%
-                      </div>
+                <div className="client-figures">
+                  <div>
+                    <div className="eyebrow">Billings</div>
+                    <div className="num strong">{gbp(r.billings)}</div>
+                  </div>
+                  <div>
+                    <div className="eyebrow">Profit</div>
+                    <div className="num strong">{gbp(r.profit)}</div>
+                  </div>
+                  <div>
+                    <div className="eyebrow">Margin</div>
+                    <div className="num strong" style={{ color: low ? "var(--crit)" : "var(--ok)" }}>
+                      {r.margin.toFixed(1)}%
                     </div>
                   </div>
-                ) : r.supplier_spend > 0 ? (
-                  <div className="client-figures">
-                    <div>
-                      <div className="eyebrow">Supplier spend</div>
-                      <div className="num strong">{gbp(r.supplier_spend)}</div>
-                    </div>
-                  </div>
-                ) : null}
+                </div>
 
                 {r.channels.length > 0 && (
                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 10 }}>
@@ -184,11 +184,14 @@ export default function OrganisationTable({
                 <div className="client-foot">
                   <small className="sub-line">{r.owner}</small>
                   <small className="sub-line">
-                    {r.campaigns
-                      ? `${r.campaigns} campaign${r.campaigns === 1 ? "" : "s"}`
-                      : "No campaigns"}
-                    {r.contacts ? ` · ${r.contacts} contact${r.contacts === 1 ? "" : "s"}` : ""}
+                    {r.campaigns} campaign{r.campaigns === 1 ? "" : "s"}
                   </small>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  {/* No clientId: that column points at the old clients table, and
+                      an organisation id would break the link. The task still gets
+                      the right title. */}
+                  <FollowUp defaultTitle={`Follow up: ${r.name}`} staff={staff} />
                 </div>
               </article>
             );
