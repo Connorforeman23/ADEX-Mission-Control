@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ADEX, type SpaceOrder } from "@/lib/po";
-import { dateGB, gbp } from "@/lib/money";
+import { dateGB } from "@/lib/money";
 import { saveSpaceOrderDetails } from "@/lib/actions";
 
 // The Space Order as ADEX actually sends it, laid out to match the Word
