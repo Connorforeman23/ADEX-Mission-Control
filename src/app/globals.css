@@ -238,6 +238,31 @@ tbody tr:hover { background: var(--blue-wash); }
    .cols get it from the grid gap, which is why stacked cards used to touch. */
 .page > .card { margin-bottom: 14px; }
 
+/* Company cards. These styles lived inside the old ClientTable component and
+   were lost when it was retired, leaving the markup with nothing behind it —
+   so the cards rendered full width with the figures stacked. Moved here so
+   they belong to the app rather than to one deleted component. */
+.client-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(292px, 1fr));
+  gap: 14px;
+}
+.client-figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 14px 0 0;
+}
+.client-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line-soft);
+}
+
 /* Minimise / expand control on a collapsible card. */
 .card-toggle {
   margin-left: auto;
