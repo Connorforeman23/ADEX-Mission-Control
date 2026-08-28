@@ -152,6 +152,13 @@ export default function OrganisationTable({
           )}
         </div>
       </section>
+
+      <OrganisationEditor
+        open={creating}
+        initial={blankOrganisation()}
+        staff={staff}
+        onClose={() => setCreating(false)}
+      />
     </>
   );
 }
