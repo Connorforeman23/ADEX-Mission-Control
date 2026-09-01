@@ -84,7 +84,12 @@ export default function PipelineBoard({
   }
 
   async function move(id: string, stage: string) {
-    await moveLeadStage(id, stage);
+    setError(null);
+    // Moving to Closed Won creates the client, the campaign and the booking
+    // task. If any of that fails the user needs to know — it used to fail
+    // silently and look like nothing had happened.
+    const res = await moveLeadStage(id, stage);
+    if (res?.error) setError(res.error);
     router.refresh();
   }
 
@@ -147,6 +152,16 @@ export default function PipelineBoard({
           </button>
         </div>
       </div>
+
+      {/* Board-level problems — the drawer has its own message, but a failure
+          while dragging a card must be visible without opening anything. */}
+      {error && !editing && (
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-body">
+            <p style={{ color: "var(--crit)", fontSize: 12.5, margin: 0 }}>{error}</p>
+          </div>
+        </section>
+      )}
 
       {view === "board" && (
         <div className="board">

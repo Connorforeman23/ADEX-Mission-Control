@@ -580,13 +580,13 @@ export async function deleteContact(id: string) {
 async function promoteWonLead(
   supabase: Awaited<ReturnType<typeof createClient>>,
   leadId: string
-) {
+): Promise<{ error?: string; campaignRef?: string }> {
   const { data: lead } = await supabase
     .from("leads")
     .select("id, name, value, owner_id, sector, organisation_id")
     .eq("id", leadId)
     .maybeSingle();
-  if (!lead) return;
+  if (!lead) return { error: "That opportunity could not be found." };
 
   // Winning the work makes the company an active client. Recorded as a tracked
   // status change with its reason, not a silent overwrite.
@@ -617,7 +617,7 @@ async function promoteWonLead(
 
   let clientId = existing?.id as string | undefined;
   if (!clientId) {
-    const { data: created } = await supabase
+    const { data: created, error: clientError } = await supabase
       .from("clients")
       .insert({
         name: lead.name,
@@ -627,14 +627,17 @@ async function promoteWonLead(
       })
       .select("id")
       .single();
+    if (clientError) {
+      return { error: `Couldn't create the client record: ${clientError.message}` };
+    }
     clientId = created?.id;
   }
-  if (!clientId) return;
+  if (!clientId) return { error: "Couldn't create the client record." };
 
   // 2. An open campaign shell, ready for booking lines. Uses the same counter
   //    as the booking form — this had its own copy of the broken text-sort
   //    logic, so a won deal could collide with a booked campaign.
-  const { data: campaign } = await supabase
+  const { data: campaign, error: campaignError } = await supabase
     .from("campaigns")
     .insert({
       ref: await nextRef(supabase),
@@ -647,6 +650,15 @@ async function promoteWonLead(
     })
     .select("id, ref")
     .single();
+
+  // This is where the promotion used to fail invisibly: a duplicate reference
+  // made the insert fail, the error was discarded, and Closed Won appeared to
+  // do nothing at all.
+  if (campaignError) {
+    return {
+      error: `The client was created, but the campaign was not: ${campaignError.message}`,
+    };
+  }
 
   // 3. The booking task that makes the step compulsory.
   await supabase.from("tasks").insert({
@@ -671,10 +683,11 @@ async function promoteWonLead(
     .ilike("organisation", lead.name)
     .is("client_id", null);
 
-  revalidatePath("/clients");
+  revalidatePath("/organisations");
   revalidatePath("/campaigns");
   revalidatePath("/tasks");
   revalidatePath("/contacts");
+  return { campaignRef: campaign?.ref as string | undefined };
 }
 
 // --- pipeline -----------------------------------------------------------
@@ -728,7 +741,10 @@ export async function saveLead(input: LeadInput) {
     becameWon = before?.stage !== "Closed Won" && input.stage === "Closed Won";
     const { error } = await supabase.from("leads").update(row).eq("id", input.id);
     if (error) return { error: error.message };
-    if (becameWon) await promoteWonLead(supabase, input.id);
+    if (becameWon) {
+      const promo = await promoteWonLead(supabase, input.id);
+      if (promo.error) return { error: promo.error };
+    }
   } else {
     const { data: created, error } = await supabase
       .from("leads")
@@ -736,7 +752,10 @@ export async function saveLead(input: LeadInput) {
       .select("id")
       .single();
     if (error) return { error: error.message };
-    if (input.stage === "Closed Won" && created) await promoteWonLead(supabase, created.id);
+    if (input.stage === "Closed Won" && created) {
+      const promo = await promoteWonLead(supabase, created.id);
+      if (promo.error) return { error: promo.error };
+    }
   }
 
   revalidatePath("/pipeline");
@@ -754,7 +773,10 @@ export async function moveLeadStage(id: string, stage: string) {
   const { error } = await supabase.from("leads").update({ stage }).eq("id", id);
   if (error) return { error: error.message };
   if (before?.stage !== "Closed Won" && stage === "Closed Won") {
-    await promoteWonLead(supabase, id);
+    // Dragging a card to Closed Won is the most common way this runs, so a
+    // failure here must reach the user rather than disappearing.
+    const promo = await promoteWonLead(supabase, id);
+    if (promo.error) return { error: promo.error };
   }
   revalidatePath("/pipeline");
   revalidatePath("/");
