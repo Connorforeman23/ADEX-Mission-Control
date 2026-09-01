@@ -66,13 +66,12 @@ export function dueAfter(iso: string) {
  * and then the supplier. 18826 reads "M4 Tower" — the site, never "JCDecaux".
  * The client is not told who we bought from.
  */
-export function lineDescription(l: CampaignLine) {
-  const what =
-    (l.detail ?? "").trim() ||
-    (l.publication ?? "").trim() ||
-    l.vendor ||
-    l.channel;
+export function lineSubject(l: CampaignLine) {
+  return (l.detail ?? "").trim() || (l.publication ?? "").trim() || l.vendor || l.channel;
+}
 
+export function lineDescription(l: CampaignLine) {
+  const what = lineSubject(l);
   if (l.line_type === "production") return `${what} Production`;
 
   const dates =
@@ -85,17 +84,46 @@ export function lineDescription(l: CampaignLine) {
 /**
  * The invoice ADEX would send for a campaign, before anyone edits it.
  *
- * One line per booking line, in booking order, at the client charge ex VAT.
- * Zero-value lines are kept — 18824 prints "1 x DEP Platinum Production" at
+ * One line per THING BOUGHT, at the client charge ex VAT — which is not the
+ * same as one line per booking line. 18824 lists nine formats because nine
+ * different things were bought, but 18826 lists "M4 Tower 07.09.26 - 04.10.26"
+ * once, even though the Space Order behind it books six separately-priced
+ * bursts on that tower. The client is buying the tower for a month; how we
+ * bought it is our business.
+ *
+ * So booking lines are grouped by what they are — the detail, or failing that
+ * the publication — with the charges summed and the dates spanning the lot.
+ * Media and production stay apart because the client is shown them apart.
+ *
+ * Zero-value lines are kept: 18824 prints "1 x DEP Platinum Production" at
  * 0.00 because the client expects to see the item listed either way.
  */
 export function draftInvoiceLines(campaign: Campaign): InvoiceLine[] {
-  const lines: InvoiceLine[] = campaign.campaign_lines.map((l) => ({
-    id: l.id,
-    campaignLineId: l.id,
-    description: lineDescription(l),
-    net: Number(l.client_charge),
-  }));
+  const groups = new Map<string, CampaignLine[]>();
+  for (const l of campaign.campaign_lines) {
+    const key = `${l.line_type ?? "media"}|${lineSubject(l).toLowerCase()}`;
+    const group = groups.get(key);
+    if (group) group.push(l);
+    else groups.set(key, [l]);
+  }
+
+  const lines: InvoiceLine[] = [...groups.values()].map((group) => {
+    const first = group[0];
+    // The span covers every booking in the group, so six bursts on one tower
+    // read as the single date range the client was sold.
+    const span: CampaignLine = {
+      ...first,
+      start_date: group.reduce((a, l) => (l.start_date < a ? l.start_date : a), first.start_date),
+      end_date: group.reduce((a, l) => (l.end_date > a ? l.end_date : a), first.end_date),
+    };
+    return {
+      id: first.id,
+      // Only a group of one can be traced back to a single booking line.
+      campaignLineId: group.length === 1 ? first.id : null,
+      description: lineDescription(span),
+      net: group.reduce((a, l) => a + Number(l.client_charge), 0),
+    };
+  });
 
   // The agency fee is charged on top of the media, so it is its own line.
   const fee = Number(campaign.fee);
