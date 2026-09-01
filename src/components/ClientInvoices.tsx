@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { dateGB, gbp } from "@/lib/money";
 import { generateClientInvoice, setInvoiceStatus } from "@/lib/actions";
@@ -46,6 +47,8 @@ export default function ClientInvoices({
     const res = await generateClientInvoice(campaignId);
     setBusy(null);
     if (res.error) return setError(res.error);
+    // Straight into the draft — it is there to be read before it goes anywhere.
+    if (res.invoiceId) return router.push(`/invoices/${res.invoiceId}`);
     router.refresh();
   }
 
@@ -134,7 +137,11 @@ export default function ClientInvoices({
               <tbody>
                 {invoices.map((inv) => (
                   <tr key={inv.id}>
-                    <td className="num ref">{inv.invoice_no ?? "—"}</td>
+                    <td className="num ref">
+                      <Link href={`/invoices/${inv.id}`} style={{ color: "var(--blue)" }}>
+                        {inv.invoice_no ?? "Draft"}
+                      </Link>
+                    </td>
                     <td>
                       <div className="strong">{inv.campaignName}</div>
                       <div className="sub-line">
@@ -159,7 +166,10 @@ export default function ClientInvoices({
                         {inv.status}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      <Link className="btn" href={`/invoices/${inv.id}`}>
+                        {inv.status === "Draft" ? "Preview / edit" : "View"}
+                      </Link>
                       {inv.status !== "Paid" && (
                         <button className="btn" disabled={busy === inv.id} onClick={() => advance(inv)}>
                           Mark {inv.status === "Draft" ? "sent" : "paid"}

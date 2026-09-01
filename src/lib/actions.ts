@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { draftInvoiceLines, dueAfter, monthEnd } from "@/lib/invoice";
+import type { Campaign } from "@/lib/money";
 
 export type LineInput = {
   id?: string;
@@ -471,7 +473,11 @@ export async function deleteTask(id: string) {
 
 // --- client invoices ----------------------------------------------------
 
-/** Raise the client invoice for a campaign at its gross ex VAT. */
+/**
+ * Draft the client invoice for a campaign — one line per booking line, at the
+ * client charge ex VAT. It is raised as a Draft on purpose: nothing leaves the
+ * building until someone has read it, edited the wording and pushed it to Xero.
+ */
 export async function generateClientInvoice(campaignId: string) {
   const supabase = await createClient();
   const {
@@ -481,25 +487,117 @@ export async function generateClientInvoice(campaignId: string) {
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, ref, fee, campaign_lines ( client_charge )")
+    .select(
+      `id, ref, name, fee, client_id, client_po,
+       campaign_lines ( id, channel, vendor, publication, detail, line_type,
+                        start_date, end_date, client_charge, supplier_gross, supplier_net )`
+    )
     .eq("id", campaignId)
     .maybeSingle();
   if (!campaign) return { error: "Campaign not found." };
 
-  type Row = { fee: number; campaign_lines: { client_charge: number }[] };
-  const c = campaign as unknown as Row & { ref: string };
-  const amount =
-    c.campaign_lines.reduce((a, l) => a + Number(l.client_charge), 0) + Number(c.fee);
+  const c = campaign as unknown as Campaign & { client_id: string | null; client_po: string | null };
+  const lines = draftInvoiceLines(c);
+  const amount = lines.reduce((a, l) => a + l.net, 0);
   if (!amount) return { error: "Nothing to invoice — the campaign has no client charges." };
 
   const { data: invoiceNo } = await supabase.rpc("next_po_number", { p_prefix: "INV" });
 
-  const { error } = await supabase.from("client_invoices").insert({
-    campaign_id: campaignId,
-    invoice_no: typeof invoiceNo === "string" ? invoiceNo : null,
-    amount_ex_vat: amount,
-  });
+  const today = new Date().toISOString().slice(0, 10);
+  const invoiceDate = monthEnd(today);
+
+  const { data: created, error } = await supabase
+    .from("client_invoices")
+    .insert({
+      campaign_id: campaignId,
+      client_id: c.client_id,
+      invoice_no: typeof invoiceNo === "string" ? invoiceNo : null,
+      amount_ex_vat: amount,
+      outstanding: amount,
+      client_po: c.client_po,
+      invoice_date: invoiceDate,
+      due_date: dueAfter(invoiceDate),
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
+
+  const invoiceId = (created as { id: string }).id;
+  const { error: lineError } = await supabase.from("client_invoice_lines").insert(
+    lines.map((l, i) => ({
+      invoice_id: invoiceId,
+      campaign_line_id: l.campaignLineId,
+      description: l.description,
+      net: l.net,
+      sort_order: i,
+    }))
+  );
+  // A header with no lines would print as a blank invoice, which is worse than
+  // no invoice at all — so take it back out rather than leave it half-made.
+  if (lineError) {
+    await supabase.from("client_invoices").delete().eq("id", invoiceId);
+    return { error: lineError.message };
+  }
+
+  revalidatePath("/finance");
+  return { invoiceId };
+}
+
+/**
+ * Save the edited invoice. Lines are replaced wholesale rather than diffed —
+ * the account handler reorders, merges and rewrites them, so matching up the
+ * old rows would be guesswork.
+ */
+export async function saveClientInvoice(
+  invoiceId: string,
+  lines: { campaignLineId: string | null; description: string; net: string }[],
+  clientPo: string
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in." };
+
+  const { data: invoice } = await supabase
+    .from("client_invoices")
+    .select("id, status")
+    .eq("id", invoiceId)
+    .maybeSingle();
+  if (!invoice) return { error: "Invoice not found." };
+  // Once it has gone to the client the figures are a matter of record.
+  if ((invoice as { status: string }).status !== "Draft") {
+    return { error: "Only a draft invoice can be edited. Credit it instead." };
+  }
+
+  const clean = lines
+    .map((l) => ({
+      campaign_line_id: l.campaignLineId,
+      description: l.description.trim(),
+      net: Number(String(l.net).replace(/[^0-9.-]/g, "")) || 0,
+    }))
+    .filter((l) => l.description || l.net);
+  if (!clean.length) return { error: "An invoice needs at least one line." };
+
+  const amount = clean.reduce((a, l) => a + l.net, 0);
+
+  await supabase.from("client_invoice_lines").delete().eq("invoice_id", invoiceId);
+  const { error } = await supabase.from("client_invoice_lines").insert(
+    clean.map((l, i) => ({ ...l, invoice_id: invoiceId, sort_order: i }))
+  );
+  if (error) return { error: error.message };
+
+  const { error: headError } = await supabase
+    .from("client_invoices")
+    .update({
+      amount_ex_vat: amount,
+      outstanding: amount,
+      client_po: clientPo.trim() || null,
+    })
+    .eq("id", invoiceId);
+  if (headError) return { error: headError.message };
+
+  revalidatePath(`/invoices/${invoiceId}`);
   revalidatePath("/finance");
   return {};
 }

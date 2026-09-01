@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { VAT_RATE, type Campaign } from "@/lib/money";
 import { spaceOrderRows, type SpaceOrder } from "@/lib/po";
+import { invoiceTotals, type ClientInvoice, type InvoiceLine } from "@/lib/invoice";
 // Row type lives in lib/organisations.ts (no server imports) so client
 // components can use it without pulling this module into the browser bundle.
 import type {
@@ -577,5 +578,109 @@ export async function getSpaceOrder(orderId: string): Promise<SpaceOrder | null>
     vat,
     total: net + vat,
     contacts,
+  };
+}
+
+// --- client invoice ------------------------------------------------------
+
+/**
+ * One client invoice with its lines, ready to print or push to Xero.
+ *
+ * The client's address comes from the organisation record rather than the
+ * older clients table, which never held one. They are matched by name — the
+ * same way 0006 built organisations out of clients in the first place.
+ */
+export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice | null> {
+  const supabase = await createClient();
+
+  const { data: invoice, error } = await supabase
+    .from("client_invoices")
+    .select(
+      `id, campaign_id, invoice_no, invoice_date, due_date, status, client_po,
+       campaigns ( ref, name, client_po, clients ( name ) )`
+    )
+    .eq("id", invoiceId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("getClientInvoice", error.message);
+    return null;
+  }
+  if (!invoice) return null;
+
+  type InvoiceRaw = {
+    id: string;
+    campaign_id: string | null;
+    invoice_no: string | null;
+    invoice_date: string;
+    due_date: string | null;
+    status: string;
+    client_po: string | null;
+    campaigns: {
+      ref: string;
+      name: string;
+      client_po: string | null;
+      clients: { name: string } | null;
+    } | null;
+  };
+  const inv = invoice as unknown as InvoiceRaw;
+  const client = inv.campaigns?.clients?.name ?? "—";
+
+  const [{ data: lineData }, { data: org }] = await Promise.all([
+    supabase
+      .from("client_invoice_lines")
+      .select("id, campaign_line_id, description, net")
+      .eq("invoice_id", invoiceId)
+      .order("sort_order"),
+    supabase
+      .from("organisations")
+      .select("address_line1, address_line2, city, postcode, country")
+      .ilike("name", client)
+      .maybeSingle(),
+  ]);
+
+  type LineRaw = {
+    id: string;
+    campaign_line_id: string | null;
+    description: string;
+    net: number;
+  };
+  const lines: InvoiceLine[] = ((lineData ?? []) as LineRaw[]).map((l) => ({
+    id: l.id,
+    campaignLineId: l.campaign_line_id,
+    description: l.description,
+    net: Number(l.net),
+  }));
+
+  type OrgRaw = {
+    address_line1: string | null;
+    address_line2: string | null;
+    city: string | null;
+    postcode: string | null;
+    country: string | null;
+  };
+  const a = (org ?? null) as OrgRaw | null;
+  const clientAddress = [a?.address_line1, a?.address_line2, a?.city, a?.country, a?.postcode]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean);
+
+  const { net, vat, total } = invoiceTotals(lines);
+
+  return {
+    id: inv.id,
+    invoiceNo: inv.invoice_no,
+    invoiceDate: inv.invoice_date,
+    dueDate: inv.due_date,
+    status: inv.status,
+    clientPo: inv.client_po ?? inv.campaigns?.client_po ?? null,
+    client,
+    clientAddress,
+    campaignId: inv.campaign_id,
+    campaignRef: inv.campaigns?.ref ?? "—",
+    campaignName: inv.campaigns?.name ?? "(deleted campaign)",
+    lines,
+    net,
+    vat,
+    total,
   };
 }
