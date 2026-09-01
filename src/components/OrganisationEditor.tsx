@@ -27,6 +27,11 @@ export const blankOrganisation = (ownerId = ""): OrganisationInput => ({
   phone: "",
   notes: "",
   archived: false,
+  contactFirstName: "",
+  contactLastName: "",
+  contactJobTitle: "",
+  contactEmail: "",
+  contactPhone: "",
 });
 
 export default function OrganisationEditor({
@@ -196,6 +201,65 @@ export default function OrganisationEditor({
             placeholder="e.g. 03508906 — unique, so it stops duplicate companies"
           />
         </label>
+
+        {/* Only when creating: an existing organisation has "Add contact" on
+            its own page, and repeating it here would be confusing. */}
+        {!initial.id && (
+          <>
+            <div className="eyebrow" style={{ marginTop: 4 }}>
+              First contact — optional
+            </div>
+            <p className="sub-line" style={{ margin: "-4px 0 0" }}>
+              Add the person you deal with now if you have them. Leave blank and the company is
+              created on its own — you can add people later.
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <label className="field" style={{ flex: "1 1 140px" }}>
+                <span>First name</span>
+                <input
+                  className="input"
+                  value={form.contactFirstName ?? ""}
+                  onChange={(e) => set("contactFirstName", e.target.value)}
+                />
+              </label>
+              <label className="field" style={{ flex: "1 1 140px" }}>
+                <span>Last name</span>
+                <input
+                  className="input"
+                  value={form.contactLastName ?? ""}
+                  onChange={(e) => set("contactLastName", e.target.value)}
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Job title</span>
+              <input
+                className="input"
+                value={form.contactJobTitle ?? ""}
+                onChange={(e) => set("contactJobTitle", e.target.value)}
+              />
+            </label>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <label className="field" style={{ flex: "1 1 180px" }}>
+                <span>Email</span>
+                <input
+                  className="input"
+                  type="email"
+                  value={form.contactEmail ?? ""}
+                  onChange={(e) => set("contactEmail", e.target.value)}
+                />
+              </label>
+              <label className="field" style={{ flex: "1 1 150px" }}>
+                <span>Phone</span>
+                <input
+                  className="input"
+                  value={form.contactPhone ?? ""}
+                  onChange={(e) => set("contactPhone", e.target.value)}
+                />
+              </label>
+            </div>
+          </>
+        )}
 
         <label className="field">
           <span>Notes</span>

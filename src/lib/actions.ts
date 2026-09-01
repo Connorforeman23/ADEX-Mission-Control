@@ -701,6 +701,10 @@ export type LeadInput = {
   stage: string;
   ownerId: string;
   nextAction: string;
+  /** Which channels are on the table — enough to tell one offer from another. */
+  channels: string[];
+  /** What's being proposed, in plain words. */
+  proposalNote: string;
 };
 
 export async function saveLead(input: LeadInput) {
@@ -729,6 +733,8 @@ export async function saveLead(input: LeadInput) {
     owner_id: ownerId,
     next_action: input.nextAction.trim() || null,
     organisation_id: (orgId as string | null) ?? null,
+    channels: input.channels.length ? input.channels : null,
+    proposal_note: input.proposalNote.trim() || null,
   };
 
   let becameWon = false;
@@ -920,6 +926,16 @@ export type OrganisationInput = {
   phone: string;
   notes: string;
   archived: boolean;
+  /**
+   * Optional first contact, so a new company and the person you deal with can
+   * be added in one go. Entirely optional — leave the name blank and no contact
+   * is created, because you often log a company before you have a name.
+   */
+  contactFirstName?: string;
+  contactLastName?: string;
+  contactJobTitle?: string;
+  contactEmail?: string;
+  contactPhone?: string;
 };
 
 /** Create or update an organisation, recording any status change with its reason. */
@@ -978,6 +994,33 @@ export async function saveOrganisation(input: OrganisationInput) {
       p_reason: input.statusReason.trim() || null,
     });
     if (error) return { error: error.message };
+  }
+
+  // Optional first contact. Only created when a first name is given, and only
+  // for a brand-new organisation — editing an existing one uses "Add contact".
+  const contactName = (input.contactFirstName ?? "").trim();
+  if (!input.id && contactName && id) {
+    const { error: contactError } = await supabase.from("contacts").insert({
+      first_name: contactName,
+      last_name: (input.contactLastName ?? "").trim() || null,
+      job_title: (input.contactJobTitle ?? "").trim() || null,
+      organisation: name,
+      organisation_id: id,
+      email: (input.contactEmail ?? "").trim() || null,
+      phone: (input.contactPhone ?? "").trim() || null,
+      status: "Prospect",
+      owner_id: ownerFor(role, user.id, input.ownerId),
+    });
+    // The organisation saved fine — say the contact didn't rather than
+    // pretending the whole thing failed.
+    if (contactError) {
+      revalidatePath("/organisations");
+      return {
+        id,
+        error: `${name} was created, but the contact was not: ${contactError.message}`,
+      };
+    }
+    revalidatePath("/contacts");
   }
 
   revalidatePath("/organisations");
