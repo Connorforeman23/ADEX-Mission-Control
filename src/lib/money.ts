@@ -17,6 +17,8 @@ export type CampaignLine = {
   id: string;
   channel: string;
   vendor: string;
+  /** The publication or site booked — FTWM, M4 Tower — not the media owner. */
+  publication?: string | null;
   detail: string | null;
   start_date: string;
   end_date: string;

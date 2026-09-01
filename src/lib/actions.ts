@@ -8,6 +8,8 @@ export type LineInput = {
   line_type: "media" | "production";
   channel: string;
   vendor: string;
+  /** The publication or site booked — FTWM, M4 Tower. Shown on the Space Order. */
+  publication: string;
   detail: string;
   start_date: string;
   end_date: string;
@@ -259,6 +261,7 @@ function lineRow(l: LineInput) {
     channel: l.channel,
     line_type: l.line_type,
     vendor: l.vendor.trim(),
+    publication: l.publication.trim() || null,
     detail: l.detail.trim() || null,
     start_date: l.start_date,
     end_date: l.end_date,

@@ -140,10 +140,12 @@ export const ADEX = {
 };
 
 export type SpaceOrderRow = {
+  /** The publication or site — FTWM, M4 Tower — not the media owner. */
   media: string;
   date: string;
   detail: string;
-  gross: number;
+  /** Blank on production rows, which carry no commission. */
+  gross: number | null;
   net: number;
   total: number;
 };
@@ -171,12 +173,25 @@ export type SpaceOrder = {
   contacts: { id: string; name: string }[];
 };
 
+/** 07.09.26 — the format the real Space Orders use. */
+export function poDate(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`;
+}
+
 /**
  * Split a line into one row per insertion.
  *
- * A single booking line often covers several dates (the FT order runs to nine
- * insertions), and the supplier expects to see them itemised. `selected_dates`
- * is free text, so we split on commas and divide the line's cost evenly.
+ * Both real orders itemise. RAN0102 lists nine Saturdays at the same rate;
+ * RAN0094 lists six bursts as date ranges at differing rates. The difference is
+ * how they were booked: several dates on ONE line share that line's cost
+ * equally (Connor's rule), whereas separately-priced bursts are separate
+ * booking lines and keep their own costs.
+ *
+ * `selected_dates` is free text, so we split on commas.
  */
 export function spaceOrderRows(
   media: string,
@@ -185,7 +200,8 @@ export function spaceOrderRows(
   startDate: string,
   endDate: string,
   gross: number,
-  commissionPct: number
+  commissionPct: number,
+  isProduction = false
 ): SpaceOrderRow[] {
   const dates = (selectedDates ?? "")
     .split(/[,;\n]+/)
@@ -194,7 +210,11 @@ export function spaceOrderRows(
 
   const list = dates.length
     ? dates
-    : [startDate === endDate ? startDate : `${startDate} – ${endDate}`];
+    : [
+        startDate === endDate
+          ? poDate(startDate)
+          : `${poDate(startDate)} - ${poDate(endDate)}`,
+      ];
 
   const perGross = gross / list.length;
   const perNet = perGross * (1 - commissionPct / 100);
@@ -203,7 +223,10 @@ export function spaceOrderRows(
     media,
     date,
     detail,
-    gross: perGross,
+    // Production carries no commission, so gross and net are the same figure.
+    // The real orders leave the gross column blank on those rows rather than
+    // printing the same number twice.
+    gross: isProduction ? null : perGross,
     net: perNet,
     total: perNet * (1 + VAT_RATE),
   }));

@@ -114,6 +114,7 @@ export default function CampaignTable({
         line_type: l.line_type ?? "media",
         channel: l.channel,
         vendor: l.vendor,
+        publication: l.publication ?? "",
         detail: l.detail ?? "",
         start_date: l.start_date,
         end_date: l.end_date,

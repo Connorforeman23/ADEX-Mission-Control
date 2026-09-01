@@ -146,7 +146,7 @@ export default function SpaceOrderSheet({ order }: { order: SpaceOrder }) {
                 <td>{r.media}</td>
                 <td>{r.date}</td>
                 <td>{r.detail}</td>
-                <td className="r">{money2(r.gross)}</td>
+                <td className="r">{r.gross == null ? "" : money2(r.gross)}</td>
                 <td className="r">{money2(r.net)}</td>
                 <td className="r">{money2(r.total)}</td>
               </tr>

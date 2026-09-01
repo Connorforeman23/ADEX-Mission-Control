@@ -17,6 +17,7 @@ const blankLine = (): LineInput => ({
   line_type: "media",
   channel: "Digital",
   vendor: SUPPLIERS_BY_CHANNEL.Digital[0],
+  publication: "",
   detail: "",
   start_date: "",
   end_date: "",
@@ -255,6 +256,15 @@ export default function BookingForm({
                       <option key={v}>{v}</option>
                     ))}
                   </select>
+                </label>
+                <label className="field">
+                  <span>Publication / site</span>
+                  <input
+                    className="input"
+                    value={l.publication}
+                    onChange={(e) => updateLine(i, { publication: e.target.value })}
+                    placeholder={`e.g. FTWM, M4 Tower — defaults to ${l.vendor}`}
+                  />
                 </label>
                 <label className="field wide">
                   <span>Detail</span>

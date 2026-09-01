@@ -22,7 +22,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
       `id, ref, name, status, region, start_date, end_date, fee, billed, leads, cpl, client_po,
        clients ( name ),
        profiles ( full_name ),
-       campaign_lines ( id, channel, vendor, detail, line_type, start_date, end_date, selected_dates,
+       campaign_lines ( id, channel, vendor, publication, detail, line_type, start_date, end_date, selected_dates,
                         cpt, ooh_format, ooh_disp_type, copy_instruction, urn, supplier_po,
                         supplier_gross, supplier_net, client_charge, space_order_id )`
     )
@@ -478,7 +478,7 @@ export async function getSpaceOrder(orderId: string): Promise<SpaceOrder | null>
   const { data: lineData } = await supabase
     .from("campaign_lines")
     .select(
-      `id, channel, vendor, detail, selected_dates, start_date, end_date,
+      `id, channel, vendor, publication, line_type, detail, selected_dates, start_date, end_date,
        supplier_gross, commission_pct, copy_instruction, urn, ooh_format, ooh_disp_type`
     )
     .eq("space_order_id", orderId)
@@ -488,6 +488,8 @@ export async function getSpaceOrder(orderId: string): Promise<SpaceOrder | null>
     id: string;
     channel: string;
     vendor: string;
+    publication: string | null;
+    line_type: string | null;
     detail: string | null;
     selected_dates: string | null;
     start_date: string;
@@ -507,18 +509,25 @@ export async function getSpaceOrder(orderId: string): Promise<SpaceOrder | null>
       l.channel === "OOH" && l.ooh_format
         ? `${l.detail ?? ""}${l.detail ? " · " : ""}${l.ooh_format} (${l.ooh_disp_type ?? "Static"})`
         : l.detail ?? "";
+    // The Media column carries the publication or site, not the media owner —
+    // FTWM rather than FT, M4 Tower rather than JCDecaux.
     return spaceOrderRows(
-      l.vendor,
+      (l.publication ?? "").trim() || l.vendor,
       detail,
       l.selected_dates,
       l.start_date,
       l.end_date,
       Number(l.supplier_gross),
-      Number(l.commission_pct)
+      Number(l.commission_pct),
+      l.line_type === "production"
     );
   });
 
-  const gross = lines.reduce((a, l) => a + Number(l.supplier_gross), 0);
+  // Production rows print no gross, so they must not be counted in the gross
+  // total either — otherwise the column doesn't add up to the figure below it.
+  const gross = lines
+    .filter((l) => l.line_type !== "production")
+    .reduce((a, l) => a + Number(l.supplier_gross), 0);
   const net = lines.reduce(
     (a, l) => a + Number(l.supplier_gross) * (1 - Number(l.commission_pct) / 100),
     0
