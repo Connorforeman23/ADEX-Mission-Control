@@ -62,16 +62,22 @@ const RESTRICTED_NO_BOOKING =
   "Booking media is handled by the wider team. As a restricted user you can manage your own " +
   "clients and prospects, but not raise campaigns or purchase orders — ask an admin to book for you.";
 
-/** Next reference in the AE-#### series. */
+/**
+ * Next reference in the AE-#### series, from an atomic counter.
+ *
+ * This used to read the highest existing ref and add one, sorted as text —
+ * which meant the seeded TST-0005 campaigns always won ("T" > "A"), so every
+ * booking was offered AE-6 and the second one collided. Text sorting also
+ * breaks at 999→1000, and two simultaneous bookings could read the same value.
+ */
 async function nextRef(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data } = await supabase
-    .from("campaigns")
-    .select("ref")
-    .order("ref", { ascending: false })
-    .limit(1);
-  const last = data?.[0]?.ref as string | undefined;
-  const n = last ? parseInt(last.replace(/\D/g, ""), 10) : 2600;
-  return `AE-${(Number.isFinite(n) ? n : 2600) + 1}`;
+  const { data, error } = await supabase.rpc("next_campaign_ref");
+  if (error || typeof data !== "string") {
+    throw new Error(
+      `Couldn't allocate a campaign reference: ${error?.message ?? "unexpected response"}`
+    );
+  }
+  return data;
 }
 
 export async function createCampaign(input: CampaignInput) {
@@ -625,17 +631,13 @@ async function promoteWonLead(
   }
   if (!clientId) return;
 
-  // 2. An open campaign shell, ready for booking lines.
-  const { data: last } = await supabase
-    .from("campaigns")
-    .select("ref")
-    .order("ref", { ascending: false })
-    .limit(1);
-  const n = last?.[0]?.ref ? parseInt(String(last[0].ref).replace(/\D/g, ""), 10) : 2600;
+  // 2. An open campaign shell, ready for booking lines. Uses the same counter
+  //    as the booking form — this had its own copy of the broken text-sort
+  //    logic, so a won deal could collide with a booked campaign.
   const { data: campaign } = await supabase
     .from("campaigns")
     .insert({
-      ref: `AE-${(Number.isFinite(n) ? n : 2600) + 1}`,
+      ref: await nextRef(supabase),
       name: `${lead.name} — first campaign`,
       client_id: clientId,
       client_org_id: orgId,

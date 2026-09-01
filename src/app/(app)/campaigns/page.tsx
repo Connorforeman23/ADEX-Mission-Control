@@ -12,7 +12,15 @@ export default async function CampaignsPage({
   const supabase = await createClient();
   const [campaigns, { data: clients }, { data: staff }, params, profile] = await Promise.all([
     getCampaigns(),
-    supabase.from("clients").select("id, name").order("name"),
+    // Organisations, not the old clients table: Rick couldn't find Sarah Raven
+    // in the dropdown because she exists as an organisation (created via the
+    // pipeline) but was never written to `clients`. Organisations are the
+    // master company record now.
+    supabase
+      .from("organisations")
+      .select("id, name")
+      .eq("archived", false)
+      .order("name"),
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
     searchParams,
     getMyProfile(),
