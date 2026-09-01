@@ -199,6 +199,9 @@ export async function createCampaign(input: CampaignInput) {
     inserted.push({ vendor: l.vendor, po: supplierPo });
   }
 
+  // One Space Order per supplier, so the booking can actually be sent out.
+  await syncSpaceOrders(supabase, campaign.id);
+
   // New copy → creative brief plus a follow-up task for whoever handles design:
   // in-house goes to James Beach; client-supplied goes back to the sales owner.
   if (needsCreative) {
@@ -357,6 +360,9 @@ export async function updateCampaign(campaignId: string, input: CampaignInput) {
   }
 
   revalidatePath("/campaigns");
+  // Editing can add a supplier or remove one, so re-sync the orders.
+  await syncSpaceOrders(supabase, campaignId);
+
   revalidatePath(`/campaigns/${campaignId}`);
   revalidatePath("/");
   return { id: campaignId };
@@ -1026,4 +1032,101 @@ export async function saveOrganisation(input: OrganisationInput) {
   revalidatePath("/organisations");
   revalidatePath(`/organisations/${id}`);
   return { id };
+}
+
+/**
+ * Make sure every supplier on a campaign has exactly one Space Order, and that
+ * their lines point at it.
+ *
+ * Migration 0010 grouped the campaigns that existed at the time, but nothing
+ * created orders for campaigns booked afterwards — so newly booked work had no
+ * Space Order to generate. Called after booking and after editing, and safe to
+ * run repeatedly: it only fills in what is missing.
+ *
+ * Rick's rule: one order per supplier, never several. ITV1 and ITVQuiz are
+ * separate lines at different rates but go on one order to ITV.
+ */
+async function syncSpaceOrders(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  campaignId: string
+) {
+  const { data: lineRows } = await supabase
+    .from("campaign_lines")
+    .select("id, vendor, supplier_po, space_order_id")
+    .eq("campaign_id", campaignId);
+
+  const lines = (lineRows ?? []) as {
+    id: string;
+    vendor: string | null;
+    supplier_po: string | null;
+    space_order_id: string | null;
+  }[];
+
+  // Group by supplier, case- and whitespace-insensitively, to match the unique
+  // index on space_orders.
+  const groups = new Map<string, { vendor: string; po: string | null; lineIds: string[] }>();
+  for (const l of lines) {
+    const vendor = (l.vendor ?? "").trim();
+    if (!vendor) continue;
+    const key = vendor.toLowerCase();
+    const g = groups.get(key) ?? { vendor, po: null, lineIds: [] };
+    g.lineIds.push(l.id);
+    // The order carries the earliest number its lines hold, as the backfill did.
+    if (l.supplier_po && (!g.po || l.supplier_po < g.po)) g.po = l.supplier_po;
+    groups.set(key, g);
+  }
+
+  const { data: existing } = await supabase
+    .from("space_orders")
+    .select("id, supplier_name")
+    .eq("campaign_id", campaignId);
+
+  const bySupplier = new Map(
+    ((existing ?? []) as { id: string; supplier_name: string }[]).map((o) => [
+      o.supplier_name.trim().toLowerCase(),
+      o.id,
+    ])
+  );
+
+  for (const [key, g] of groups) {
+    let orderId = bySupplier.get(key);
+
+    // Suppliers become organisations too, so they gain contacts and an address
+    // rather than staying as loose text on a booking line.
+    const { data: supplierOrgId } = await supabase.rpc("find_or_create_organisation", {
+      p_name: g.vendor,
+      p_sector: null,
+      p_owner: null,
+    });
+    if (supplierOrgId) {
+      await supabase
+        .from("organisations")
+        .update({ is_supplier: true })
+        .eq("id", supplierOrgId as string);
+    }
+
+    if (!orderId) {
+      const { data: created } = await supabase
+        .from("space_orders")
+        .insert({
+          campaign_id: campaignId,
+          supplier_org_id: (supplierOrgId as string | null) ?? null,
+          supplier_name: g.vendor,
+          order_number: g.po,
+        })
+        .select("id")
+        .single();
+      orderId = created?.id as string | undefined;
+    }
+
+    if (orderId) {
+      await supabase
+        .from("campaign_lines")
+        .update({
+          space_order_id: orderId,
+          supplier_org_id: (supplierOrgId as string | null) ?? null,
+        })
+        .in("id", g.lineIds);
+    }
+  }
 }
