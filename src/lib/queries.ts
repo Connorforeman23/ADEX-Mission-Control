@@ -596,7 +596,7 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
   const { data: invoice, error } = await supabase
     .from("client_invoices")
     .select(
-      `id, campaign_id, invoice_no, invoice_date, due_date, status, client_po,
+      `id, campaign_id, invoice_no, invoice_date, due_date, status, client_po, xero_id,
        campaigns ( ref, name, client_po, clients ( name ) )`
     )
     .eq("id", invoiceId)
@@ -616,6 +616,7 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
     due_date: string | null;
     status: string;
     client_po: string | null;
+    xero_id: string | null;
     campaigns: {
       ref: string;
       name: string;
@@ -672,6 +673,7 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
     invoiceDate: inv.invoice_date,
     dueDate: inv.due_date,
     status: inv.status,
+    xeroId: inv.xero_id,
     clientPo: inv.client_po ?? inv.campaigns?.client_po ?? null,
     client,
     clientAddress,

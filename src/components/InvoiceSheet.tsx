@@ -7,6 +7,7 @@ import { ADEX } from "@/lib/po";
 import { dateGB } from "@/lib/money";
 import { invoiceTotals, PAYMENT_TERMS, type ClientInvoice } from "@/lib/invoice";
 import { saveClientInvoice } from "@/lib/actions";
+import { pushInvoiceToXero } from "@/lib/xero-actions";
 
 // The client invoice as ADEX sends it, laid out to match the Randox invoices.
 // The client sees description, net, VAT and gross — never the supplier, what we
@@ -20,7 +21,8 @@ type Draft = { key: string; campaignLineId: string | null; description: string; 
 
 export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
   const router = useRouter();
-  const draft = invoice.status === "Draft";
+  // Editable only while it is ours: a draft Xero has never seen.
+  const draft = invoice.status === "Draft" && !invoice.xeroId;
 
   const [lines, setLines] = useState<Draft[]>(
     invoice.lines.map((l) => ({
@@ -34,6 +36,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pushed, setPushed] = useState<string | null>(null);
 
   // Totals follow what is on screen, so an edit shows its effect before saving.
   const totals = invoiceTotals(
@@ -81,6 +84,31 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
     window.print();
   }
 
+  // Saves first on purpose — Xero should receive what is on the screen, not
+  // whatever was last written to the database.
+  async function pushToXero() {
+    setBusy(true);
+    setError(null);
+    const write = await saveClientInvoice(
+      invoice.id,
+      lines.map((l) => ({
+        campaignLineId: l.campaignLineId,
+        description: l.description,
+        net: l.net,
+      })),
+      clientPo
+    );
+    if (write.error) {
+      setBusy(false);
+      return setError(write.error);
+    }
+    const res = await pushInvoiceToXero(invoice.id);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setPushed(res.message);
+    router.refresh();
+  }
+
   return (
     <>
       {/* Controls — deliberately excluded from the printed invoice. */}
@@ -103,16 +131,27 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
               <button className="btn" onClick={save} disabled={busy}>
                 {busy ? "Saving…" : saved ? "Saved" : "Save draft"}
               </button>
-              <button className="btn btn-primary" onClick={saveThenPrint} disabled={busy}>
+              <button className="btn" onClick={saveThenPrint} disabled={busy}>
                 Print / Save as PDF
+              </button>
+              <button className="btn btn-primary" onClick={pushToXero} disabled={busy}>
+                {busy ? "Working…" : "Push to Xero"}
               </button>
             </div>
           </>
         ) : (
           <>
             <p className="inv-locked">
-              This invoice is <b>{invoice.status}</b>, so the figures are fixed. Raise a credit
-              rather than editing it.
+              {invoice.xeroId ? (
+                <>
+                  This invoice is in <b>Xero</b> now, so Xero is the record. Edit it there.
+                </>
+              ) : (
+                <>
+                  This invoice is <b>{invoice.status}</b>, so the figures are fixed. Raise a credit
+                  rather than editing it.
+                </>
+              )}
             </p>
             <button className="btn btn-primary" onClick={saveThenPrint}>
               Print / Save as PDF
@@ -121,6 +160,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
         )}
       </div>
       {error && <p style={{ color: "var(--crit)", fontSize: 12.5 }}>{error}</p>}
+      {pushed && <p style={{ color: "var(--ok)", fontSize: 12.5 }}>{pushed}</p>}
 
       {/* The invoice itself. */}
       <div className="inv-sheet">

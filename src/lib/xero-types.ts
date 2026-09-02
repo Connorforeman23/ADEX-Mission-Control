@@ -32,3 +32,7 @@ export type LoadContactsResult =
   | { ok: false; error: string };
 
 export type PushInvoiceResult = { ok: true; message: string } | { ok: false; error: string };
+
+export type XeroInvoiceResult =
+  | { ok: true; invoiceNumber: string | null; message: string }
+  | { ok: false; error: string };

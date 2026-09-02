@@ -2,8 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getClientInvoice } from "@/lib/queries";
 import { fetchXeroContacts, xeroApi, xeroConfigured } from "@/lib/xero";
-import type { LoadContactsResult, PushInvoiceResult, XeroStatus } from "@/lib/xero-types";
+import type {
+  LoadContactsResult,
+  PushInvoiceResult,
+  XeroContact,
+  XeroInvoiceResult,
+  XeroStatus,
+} from "@/lib/xero-types";
 
 // Server actions for the Xero panel. Every one goes through the admin-only
 // definer functions, so a non-admin calling these directly gets refused by the
@@ -138,3 +145,118 @@ export async function pushTestDraftInvoice(
   }
 }
 
+
+/**
+ * Push a client invoice to Xero as a DRAFT.
+ *
+ * Draft on purpose, twice over: nothing reaches a client from the CRM, and
+ * someone in Xero still approves it. What we hand over is the schedule and the
+ * amounts; Xero assigns the invoice number, because ADEX's numbers run one
+ * sequence and only one system can own it.
+ */
+export async function pushInvoiceToXero(invoiceId: string): Promise<XeroInvoiceResult> {
+  const supabase = await createClient();
+
+  const invoice = await getClientInvoice(invoiceId);
+  if (!invoice) return { ok: false, error: "Invoice not found." };
+  if (invoice.status !== "Draft") {
+    return { ok: false, error: "Only a draft invoice can be pushed to Xero." };
+  }
+  if (!invoice.lines.length) {
+    return { ok: false, error: "This invoice has no lines." };
+  }
+
+  const { data: existing } = await supabase
+    .from("client_invoices")
+    .select("xero_id")
+    .eq("id", invoiceId)
+    .maybeSingle();
+  if ((existing as { xero_id: string | null } | null)?.xero_id) {
+    return { ok: false, error: "This invoice is already in Xero." };
+  }
+
+  try {
+    const contact = await findOrCreateXeroContact(invoice.client);
+
+    const result = await xeroApi<{ Invoices?: { InvoiceID: string; InvoiceNumber?: string }[] }>(
+      "/Invoices",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          Invoices: [
+            {
+              Type: "ACCREC", // money owed to us
+              Contact: { ContactID: contact.ContactID },
+              Date: invoice.invoiceDate,
+              DueDate: invoice.dueDate ?? invoice.invoiceDate,
+              // Xero's Reference shows on the invoice — the client's own PO is
+              // what they will match the payment against.
+              Reference: invoice.clientPo
+                ? `PO Number ${invoice.clientPo}`
+                : invoice.campaignRef,
+              Status: "DRAFT",
+              // Our amounts are ex VAT, matching the Net Amount column.
+              LineAmountTypes: "Exclusive",
+              LineItems: invoice.lines.map((l) => ({
+                Description: l.description,
+                Quantity: 1,
+                UnitAmount: l.net,
+                AccountCode: "200", // Sales
+                TaxType: "OUTPUT2", // UK standard rate, 20%
+              })),
+            },
+          ],
+        }),
+      }
+    );
+
+    const created = result.Invoices?.[0];
+    if (!created?.InvoiceID) {
+      return { ok: false, error: "Xero accepted the request but returned no invoice." };
+    }
+
+    const { error } = await supabase
+      .from("client_invoices")
+      .update({ xero_id: created.InvoiceID, invoice_no: created.InvoiceNumber ?? null })
+      .eq("id", invoiceId);
+    if (error) {
+      // The invoice exists in Xero either way — say so rather than let someone
+      // push it a second time.
+      return {
+        ok: false,
+        error: `Created in Xero (${created.InvoiceNumber ?? created.InvoiceID}) but could not be recorded here: ${error.message}`,
+      };
+    }
+
+    await supabase.rpc("xero_mark_synced");
+    revalidatePath(`/invoices/${invoiceId}`);
+    revalidatePath("/finance");
+
+    return {
+      ok: true,
+      invoiceNumber: created.InvoiceNumber ?? null,
+      message: `Draft invoice ${created.InvoiceNumber ?? ""} created in Xero for ${invoice.client}. Approve and send it there.`.replace(
+        /\s+/g,
+        " "
+      ),
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not write to Xero." };
+  }
+}
+
+/** The client as Xero knows them, created if Xero has never seen them. */
+async function findOrCreateXeroContact(name: string) {
+  const where = encodeURIComponent(`Name=="${name.replace(/"/g, '\\"')}"`);
+  const found = await xeroApi<{ Contacts?: XeroContact[] }>(`/Contacts?where=${where}`);
+  const match = found.Contacts?.[0];
+  if (match) return match;
+
+  const created = await xeroApi<{ Contacts?: XeroContact[] }>("/Contacts", {
+    method: "POST",
+    body: JSON.stringify({ Contacts: [{ Name: name }] }),
+  });
+  const contact = created.Contacts?.[0];
+  if (!contact) throw new Error(`Could not find or create "${name}" in Xero.`);
+  return contact;
+}

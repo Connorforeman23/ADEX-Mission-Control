@@ -31,6 +31,8 @@ export type ClientInvoice = {
   invoiceDate: string;
   dueDate: string | null;
   status: string;
+  /** Set once Xero holds it — from then on Xero is the record. */
+  xeroId: string | null;
   clientPo: string | null;
   client: string;
   clientAddress: string[];

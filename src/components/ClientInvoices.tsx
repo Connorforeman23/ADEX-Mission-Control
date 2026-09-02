@@ -70,8 +70,8 @@ export default function ClientInvoices({
             className="btn"
             onClick={() =>
               setError(
-                "Xero isn't connected yet. Once it is, this pushes every invoice below to Xero " +
-                  "with its number and campaign bookings cross-referenced automatically."
+                "Invoices go to Xero one at a time, from the invoice itself — open a draft and " +
+                  "press Push to Xero. Xero assigns the number."
               )
             }
           >
@@ -115,8 +115,8 @@ export default function ClientInvoices({
 
         {invoices.length === 0 ? (
           <p className="empty-note">
-            No invoices raised yet. Generate one from a campaign above — the number follows the INV
-            sequence and links back to the campaign&rsquo;s bookings.
+            No invoices raised yet. Generate one from a campaign above — it opens as a draft you
+            can read and edit before anything goes to Xero.
           </p>
         ) : (
           <div className="table-wrap">

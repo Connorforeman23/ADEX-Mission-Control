@@ -501,17 +501,17 @@ export async function generateClientInvoice(campaignId: string) {
   const amount = lines.reduce((a, l) => a + l.net, 0);
   if (!amount) return { error: "Nothing to invoice — the campaign has no client charges." };
 
-  const { data: invoiceNo } = await supabase.rpc("next_po_number", { p_prefix: "INV" });
-
   const today = new Date().toISOString().slice(0, 10);
   const invoiceDate = monthEnd(today);
 
+  // No number is minted here. ADEX's invoices run one sequence — 18824, 18825,
+  // 18826 — owned by Xero, so the number is whatever Xero returns when the
+  // draft is pushed. Two systems both handing out numbers would collide.
   const { data: created, error } = await supabase
     .from("client_invoices")
     .insert({
       campaign_id: campaignId,
       client_id: c.client_id,
-      invoice_no: typeof invoiceNo === "string" ? invoiceNo : null,
       amount_ex_vat: amount,
       outstanding: amount,
       client_po: c.client_po,
@@ -561,13 +561,19 @@ export async function saveClientInvoice(
 
   const { data: invoice } = await supabase
     .from("client_invoices")
-    .select("id, status")
+    .select("id, status, xero_id")
     .eq("id", invoiceId)
     .maybeSingle();
   if (!invoice) return { error: "Invoice not found." };
+  const head = invoice as { status: string; xero_id: string | null };
   // Once it has gone to the client the figures are a matter of record.
-  if ((invoice as { status: string }).status !== "Draft") {
+  if (head.status !== "Draft") {
     return { error: "Only a draft invoice can be edited. Credit it instead." };
+  }
+  // And once Xero holds it, Xero is the record. Editing here would leave the
+  // two disagreeing with no way to tell which is right.
+  if (head.xero_id) {
+    return { error: "This invoice is in Xero now. Edit it there." };
   }
 
   const clean = lines
