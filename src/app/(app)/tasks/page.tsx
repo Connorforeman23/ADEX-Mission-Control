@@ -16,7 +16,9 @@ export default async function TasksPage({
   const [tasks, { data: staff }, { data: clients }, params] = await Promise.all([
     getTasks(),
     supabase.from("profiles").select("id, full_name").order("full_name"),
-    supabase.from("clients").select("id, name").order("name"),
+    // owner_id comes along so a task for a client defaults to whoever owns
+    // that client (Rick), rather than to whoever happens to be typing.
+    supabase.from("clients").select("id, name, owner_id").order("name"),
     searchParams,
   ]);
 

@@ -330,7 +330,7 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
   const [contactsRes, oppsRes, campsRes, invRes, histRes, spendRes] = await Promise.all([
     supabase
       .from("contacts")
-      .select("id, first_name, last_name, job_title, email, phone, status")
+      .select("id, first_name, last_name, job_title, email, phone")
       .eq("organisation_id", id)
       .order("first_name"),
     supabase
@@ -380,14 +380,13 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
 
     contacts: ((contactsRes.data ?? []) as unknown as {
       id: string; first_name: string; last_name: string | null;
-      job_title: string | null; email: string | null; phone: string | null; status: string;
+      job_title: string | null; email: string | null; phone: string | null;
     }[]).map((c) => ({
       id: c.id,
       name: [c.first_name, c.last_name].filter(Boolean).join(" "),
       job_title: c.job_title,
       email: c.email,
       phone: c.phone,
-      status: c.status,
     })),
 
     opportunities: ((oppsRes.data ?? []) as unknown as {

@@ -263,7 +263,7 @@ export default function BookingForm({
                     className="input"
                     value={l.publication}
                     onChange={(e) => updateLine(i, { publication: e.target.value })}
-                    placeholder={`e.g. FTWM, M4 Tower — defaults to ${l.vendor}`}
+                    placeholder="e.g. FTWM, M4 Tower"
                   />
                 </label>
                 <label className="field wide">

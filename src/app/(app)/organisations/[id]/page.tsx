@@ -108,7 +108,6 @@ export default async function OrganisationPage({
                         {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ") || "—"}
                       </small>
                     </div>
-                    <span className="pill">{c.status}</span>
                   </div>
                 ))}
               </div>

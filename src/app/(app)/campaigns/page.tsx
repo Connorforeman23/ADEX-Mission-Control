@@ -16,10 +16,15 @@ export default async function CampaignsPage({
     // in the dropdown because she exists as an organisation (created via the
     // pipeline) but was never written to `clients`. Organisations are the
     // master company record now.
+    //
+    // But only the ones we sell to. A company that is purely a supplier has
+    // customer_status "none" and has no business in a client dropdown — Rick
+    // found ITV and JCDecaux offered as clients.
     supabase
       .from("organisations")
       .select("id, name")
       .eq("archived", false)
+      .neq("customer_status", "none")
       .order("name"),
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
     searchParams,

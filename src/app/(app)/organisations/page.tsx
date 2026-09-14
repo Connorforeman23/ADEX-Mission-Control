@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 export default async function OrganisationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lens?: string }>;
+  searchParams: Promise<{ lens?: string; new?: string }>;
 }) {
-  const { lens } = await searchParams;
+  const { lens, new: isNew } = await searchParams;
   const [rows, staff] = await Promise.all([getOrganisations(), getSalesTeam()]);
   const live = rows.filter((r) => !r.archived);
 
@@ -73,6 +73,7 @@ export default async function OrganisationsPage({
         initialLens={
           lens === "clients" || lens === "prospects" || lens === "suppliers" ? lens : "all"
         }
+        openNew={isNew === "1"}
       />
     </div>
   );

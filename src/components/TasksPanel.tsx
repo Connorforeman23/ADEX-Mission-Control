@@ -25,7 +25,7 @@ export default function TasksPanel({
 }: {
   tasks: TaskRow[];
   staff: { id: string; full_name: string }[];
-  clients: { id: string; name: string }[];
+  clients: { id: string; name: string; owner_id: string | null }[];
   /** Signed-in user — new tasks default to them. */
   meId: string;
   today: string;
@@ -217,7 +217,18 @@ export default function TasksPanel({
                 <select
                   className="input"
                   value={editing.clientId ?? ""}
-                  onChange={(e) => setEditing({ ...editing, clientId: e.target.value || undefined })}
+                  onChange={(e) => {
+                    const clientId = e.target.value || undefined;
+                    // Choosing a client hands the task to that client's owner.
+                    // They can still reassign it — this is a default, not a rule.
+                    const owner = clients.find((c) => c.id === clientId)?.owner_id;
+                    const ownerOnStaff = owner && staff.some((s) => s.id === owner);
+                    setEditing({
+                      ...editing,
+                      clientId,
+                      assigneeId: ownerOnStaff ? owner : editing.assigneeId,
+                    });
+                  }}
                 >
                   <option value="">—</option>
                   {clients.map((c) => (

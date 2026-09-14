@@ -646,7 +646,6 @@ export type ContactInput = {
   mobile: string;
   linkedin: string;
   notes: string;
-  status: string;
   ownerId: string;
   leadId?: string;
 };
@@ -660,27 +659,30 @@ export async function saveContact(input: ContactInput) {
 
   const ownerId = ownerFor(role, user.id, input.ownerId);
 
-  // A contact belongs to an organisation. Matching the typed company name to an
-  // existing organisation (or creating one) is what stops the free-text company
-  // problem coming back.
-  const { data: orgId } = await supabase.rpc("find_or_create_organisation", {
-    p_name: input.organisation.trim(),
-    p_sector: null,
-    p_owner: ownerId,
-  });
+  // A contact belongs to an organisation that already exists. Rick's rule:
+  // organisation first, then contact, as two clean steps — a contact form is
+  // the wrong place to be inventing companies.
+  const { data: org } = await supabase
+    .from("organisations")
+    .select("id, name")
+    .ilike("name", input.organisation.trim())
+    .maybeSingle();
+  if (!org) {
+    return { error: `"${input.organisation.trim()}" isn't an organisation yet. Create it first, then add the contact.` };
+  }
+  const { id: orgId, name: orgName } = org as { id: string; name: string };
 
   const row = {
     first_name: input.firstName.trim(),
     last_name: input.lastName.trim() || null,
     job_title: input.jobTitle.trim() || null,
-    organisation: input.organisation.trim(),
-    organisation_id: (orgId as string | null) ?? null,
+    organisation: orgName,
+    organisation_id: orgId,
     email: input.email.trim() || null,
     phone: input.phone.trim() || null,
     mobile: input.mobile.trim() || null,
     linkedin: input.linkedin.trim() || null,
     notes: input.notes.trim() || null,
-    status: input.status,
     owner_id: ownerId,
     lead_id: input.leadId || null,
   };
@@ -802,14 +804,12 @@ async function promoteWonLead(
     lead_id: lead.id,
   });
 
-  // 4. Contacts at that organisation become client contacts.
+  // 4. Contacts at that organisation become client contacts. Their status is
+  //    the organisation's — Active Client now — so only the link is set.
+  await supabase.from("contacts").update({ client_id: clientId }).eq("lead_id", lead.id);
   await supabase
     .from("contacts")
-    .update({ status: "Client", client_id: clientId })
-    .eq("lead_id", lead.id);
-  await supabase
-    .from("contacts")
-    .update({ status: "Client", client_id: clientId })
+    .update({ client_id: clientId })
     .ilike("organisation", lead.name)
     .is("client_id", null);
 
@@ -1138,7 +1138,6 @@ export async function saveOrganisation(input: OrganisationInput) {
       organisation_id: id,
       email: (input.contactEmail ?? "").trim() || null,
       phone: (input.contactPhone ?? "").trim() || null,
-      status: "Prospect",
       owner_id: ownerFor(role, user.id, input.ownerId),
     });
     // The organisation saved fine — say the contact didn't rather than

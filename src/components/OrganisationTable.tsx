@@ -49,13 +49,17 @@ export default function OrganisationTable({
   rows,
   staff,
   initialLens = "all",
+  openNew = false,
 }: {
   rows: OrganisationRow[];
   staff: { id: string; full_name: string }[];
   /** Set by /clients, which now redirects here filtered to clients. */
   initialLens?: Lens;
+  /** Arrive with the New organisation drawer open — the contact form sends
+   *  people here when the company they need doesn't exist yet. */
+  openNew?: boolean;
 }) {
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(openNew);
   const [view, setView] = useState<"cards" | "table">("cards");
   const [lens, setLens] = useState<Lens>(initialLens);
   const [owner, setOwner] = useState("All");
