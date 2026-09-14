@@ -7,6 +7,7 @@ export default function DevBanner() {
   return (
     <div
       role="status"
+      className="dev-banner"
       style={{
         position: "sticky",
         top: 0,

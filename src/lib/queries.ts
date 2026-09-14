@@ -1,7 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { VAT_RATE, type Campaign } from "@/lib/money";
 import { spaceOrderRows, type SpaceOrder } from "@/lib/po";
-import { invoiceTotals, type ClientInvoice, type InvoiceLine } from "@/lib/invoice";
+import {
+  draftInvoiceLines,
+  dueAfter,
+  invoiceTotals,
+  monthEnd,
+  type ClientInvoice,
+  type InvoiceLine,
+} from "@/lib/invoice";
 // Row type lives in lib/organisations.ts (no server imports) so client
 // components can use it without pulling this module into the browser bundle.
 import type {
@@ -627,17 +634,13 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
   const inv = invoice as unknown as InvoiceRaw;
   const client = inv.campaigns?.clients?.name ?? "—";
 
-  const [{ data: lineData }, { data: org }] = await Promise.all([
+  const [{ data: lineData }, clientAddress] = await Promise.all([
     supabase
       .from("client_invoice_lines")
       .select("id, campaign_line_id, description, net")
       .eq("invoice_id", invoiceId)
       .order("sort_order"),
-    supabase
-      .from("organisations")
-      .select("address_line1, address_line2, city, postcode, country")
-      .ilike("name", client)
-      .maybeSingle(),
+    clientAddressFor(supabase, client),
   ]);
 
   type LineRaw = {
@@ -652,18 +655,6 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
     description: l.description,
     net: Number(l.net),
   }));
-
-  type OrgRaw = {
-    address_line1: string | null;
-    address_line2: string | null;
-    city: string | null;
-    postcode: string | null;
-    country: string | null;
-  };
-  const a = (org ?? null) as OrgRaw | null;
-  const clientAddress = [a?.address_line1, a?.address_line2, a?.city, a?.country, a?.postcode]
-    .map((s) => (s ?? "").trim())
-    .filter(Boolean);
 
   const { net, vat, total } = invoiceTotals(lines);
 
@@ -680,6 +671,84 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
     campaignId: inv.campaign_id,
     campaignRef: inv.campaigns?.ref ?? "—",
     campaignName: inv.campaigns?.name ?? "(deleted campaign)",
+    lines,
+    net,
+    vat,
+    total,
+  };
+}
+
+/** The client's address block, from their organisation record — matched by name. */
+async function clientAddressFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  client: string
+): Promise<string[]> {
+  const { data: org } = await supabase
+    .from("organisations")
+    .select("address_line1, address_line2, city, postcode, country")
+    .ilike("name", client)
+    .maybeSingle();
+
+  type OrgRaw = {
+    address_line1: string | null;
+    address_line2: string | null;
+    city: string | null;
+    postcode: string | null;
+    country: string | null;
+  };
+  const a = (org ?? null) as OrgRaw | null;
+  return [a?.address_line1, a?.address_line2, a?.city, a?.country, a?.postcode]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean);
+}
+
+/**
+ * The invoice a campaign WOULD produce, with nothing written anywhere.
+ *
+ * Rick's point: check it before the record exists, not after. So this builds
+ * the same document from the campaign alone; "Save as draft" on that page is
+ * what creates the row. The empty id is how the sheet knows it is unsaved.
+ */
+export async function getInvoicePreview(campaignId: string): Promise<ClientInvoice | null> {
+  const supabase = await createClient();
+
+  const { data: campaign, error } = await supabase
+    .from("campaigns")
+    .select(
+      `id, ref, name, fee, client_po, clients ( name ),
+       campaign_lines ( id, channel, vendor, publication, detail, line_type,
+                        start_date, end_date, client_charge, supplier_gross, supplier_net )`
+    )
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("getInvoicePreview", error.message);
+    return null;
+  }
+  if (!campaign) return null;
+
+  const c = campaign as unknown as Campaign & { client_po: string | null };
+  const client = c.clients?.name ?? "—";
+  const lines = draftInvoiceLines(c);
+  const clientAddress = await clientAddressFor(supabase, client);
+
+  const invoiceDate = monthEnd(new Date().toISOString().slice(0, 10));
+  const { net, vat, total } = invoiceTotals(lines);
+
+  return {
+    id: "",
+    invoiceNo: null,
+    invoiceDate,
+    dueDate: dueAfter(invoiceDate),
+    status: "Draft",
+    xeroId: null,
+    clientPo: c.client_po,
+    client,
+    clientAddress,
+    campaignId: c.id,
+    campaignRef: c.ref,
+    campaignName: c.name,
     lines,
     net,
     vat,

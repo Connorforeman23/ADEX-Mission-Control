@@ -193,6 +193,14 @@ export async function xeroApi<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
+    // 401 with a live token means Xero no longer recognises the organisation —
+    // the Demo Company resets itself every 28 days and drops the connection.
+    // Raw JSON here helps nobody; say what to do about it.
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(
+        "Xero has dropped the connection. Go to Settings → Xero, disconnect and connect again."
+      );
+    }
     throw new Error(`Xero API ${path} failed (${res.status}): ${await res.text()}`);
   }
   return (await res.json()) as T;

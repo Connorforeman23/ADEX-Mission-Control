@@ -6,13 +6,19 @@ import { useRouter } from "next/navigation";
 import { ADEX } from "@/lib/po";
 import { dateGB } from "@/lib/money";
 import { invoiceTotals, PAYMENT_TERMS, type ClientInvoice } from "@/lib/invoice";
-import { saveClientInvoice } from "@/lib/actions";
+import { generateClientInvoice, saveClientInvoice } from "@/lib/actions";
 import { pushInvoiceToXero } from "@/lib/xero-actions";
+import { printAs } from "@/lib/print";
 
 // The client invoice as ADEX sends it, laid out to match the Randox invoices.
 // The client sees description, net, VAT and gross — never the supplier, what we
 // paid them, or the margin. That is the whole point of keeping this document
 // separate from the Space Order.
+//
+// Three states, in the order an invoice moves through them:
+//   unsaved  — a preview built from the campaign; nothing exists yet
+//   draft    — saved here, editable, not yet in Xero
+//   locked   — in Xero, or sent/paid: the figures are a matter of record
 function money2(n: number) {
   return n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -21,6 +27,7 @@ type Draft = { key: string; campaignLineId: string | null; description: string; 
 
 export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
   const router = useRouter();
+  const unsaved = invoice.id === "";
   // Editable only while it is ours: a draft Xero has never seen.
   const draft = invoice.status === "Draft" && !invoice.xeroId;
 
@@ -43,6 +50,13 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
     lines.map((l) => ({ net: Number(l.net.replace(/[^0-9.-]/g, "")) || 0 }))
   );
 
+  const payload = () =>
+    lines.map((l) => ({
+      campaignLineId: l.campaignLineId,
+      description: l.description,
+      net: l.net,
+    }));
+
   function update(i: number, patch: Partial<Draft>) {
     setLines((prev) => prev.map((l, n) => (n === i ? { ...l, ...patch } : l)));
     setSaved(false);
@@ -51,7 +65,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
   function addLine() {
     setLines((prev) => [
       ...prev,
-      { key: `new-${prev.length}-${prev.length}`, campaignLineId: null, description: "", net: "" },
+      { key: `new-${Date.now()}`, campaignLineId: null, description: "", net: "" },
     ]);
   }
 
@@ -60,18 +74,21 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
     setSaved(false);
   }
 
+  /** Unsaved → draft. This is the moment the record comes into being. */
+  async function createDraft() {
+    if (!invoice.campaignId) return;
+    setBusy(true);
+    setError(null);
+    const res = await generateClientInvoice(invoice.campaignId, payload(), clientPo);
+    setBusy(false);
+    if (res.error) return setError(res.error);
+    if (res.invoiceId) router.push(`/invoices/${res.invoiceId}`);
+  }
+
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveClientInvoice(
-      invoice.id,
-      lines.map((l) => ({
-        campaignLineId: l.campaignLineId,
-        description: l.description,
-        net: l.net,
-      })),
-      clientPo
-    );
+    const res = await saveClientInvoice(invoice.id, payload(), clientPo);
     setBusy(false);
     if (res.error) return setError(res.error);
     setSaved(true);
@@ -79,9 +96,9 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
     router.refresh();
   }
 
-  async function saveThenPrint() {
-    if (draft) await save();
-    window.print();
+  async function print() {
+    if (draft && !unsaved) await save();
+    printAs(`Invoice ${invoice.invoiceNo ?? invoice.campaignRef} - ${invoice.client}`);
   }
 
   // Saves first on purpose — Xero should receive what is on the screen, not
@@ -89,15 +106,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
   async function pushToXero() {
     setBusy(true);
     setError(null);
-    const write = await saveClientInvoice(
-      invoice.id,
-      lines.map((l) => ({
-        campaignLineId: l.campaignLineId,
-        description: l.description,
-        net: l.net,
-      })),
-      clientPo
-    );
+    const write = await saveClientInvoice(invoice.id, payload(), clientPo);
     if (write.error) {
       setBusy(false);
       return setError(write.error);
@@ -128,15 +137,23 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
               <button className="btn" onClick={addLine} disabled={busy}>
                 Add line
               </button>
-              <button className="btn" onClick={save} disabled={busy}>
-                {busy ? "Saving…" : saved ? "Saved" : "Save draft"}
-              </button>
-              <button className="btn" onClick={saveThenPrint} disabled={busy}>
-                Print / Save as PDF
-              </button>
-              <button className="btn btn-primary" onClick={pushToXero} disabled={busy}>
-                {busy ? "Working…" : "Push to Xero"}
-              </button>
+              {unsaved ? (
+                <button className="btn btn-primary" onClick={createDraft} disabled={busy}>
+                  {busy ? "Saving…" : "Save as draft"}
+                </button>
+              ) : (
+                <>
+                  <button className="btn" onClick={save} disabled={busy}>
+                    {busy ? "Saving…" : saved ? "Saved" : "Save"}
+                  </button>
+                  <button className="btn" onClick={print} disabled={busy}>
+                    Print / Save as PDF
+                  </button>
+                  <button className="btn btn-primary" onClick={pushToXero} disabled={busy}>
+                    {busy ? "Working…" : "Push to Xero"}
+                  </button>
+                </>
+              )}
             </div>
           </>
         ) : (
@@ -153,17 +170,23 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
                 </>
               )}
             </p>
-            <button className="btn btn-primary" onClick={saveThenPrint}>
+            <button className="btn btn-primary" onClick={print}>
               Print / Save as PDF
             </button>
           </>
         )}
       </div>
+      {unsaved && (
+        <p className="inv-hint">
+          Nothing has been created yet. Check the wording and amounts, then <b>Save as draft</b> —
+          that is what creates the invoice record. Xero comes after.
+        </p>
+      )}
       {error && <p style={{ color: "var(--crit)", fontSize: 12.5 }}>{error}</p>}
       {pushed && <p style={{ color: "var(--ok)", fontSize: 12.5 }}>{pushed}</p>}
 
       {/* The invoice itself. */}
-      <div className="inv-sheet">
+      <div className="inv-sheet print-sheet">
         <div className="inv-top">
           <div className="inv-logo">
             <Image src="/adex-logo.jpg" alt="adex" width={140} height={99} priority />
@@ -172,7 +195,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
             <tbody>
               <tr>
                 <th>Invoice Number</th>
-                <td className="inv-no">{invoice.invoiceNo ?? "Draft"}</td>
+                <td className="inv-no">{invoice.invoiceNo ?? (unsaved ? "Preview" : "Draft")}</td>
               </tr>
               <tr>
                 <th>Invoice Date</th>
@@ -262,29 +285,25 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
               );
             })}
           </tbody>
-          <tfoot>
+        </table>
+
+        {/* Totals as a block on the right, the way the printed invoice reads —
+            label then figure, rather than numbers scattered across columns. */}
+        <table className="inv-totals">
+          <tbody>
             <tr>
-              <td className="r">Total Net Amount £</td>
+              <th>Total Net Amount £</th>
               <td className="r">{money2(totals.net)}</td>
-              <td />
-              <td />
-              {draft && <td className="inv-x" />}
             </tr>
             <tr>
-              <td className="r">Total VAT Amount £</td>
+              <th>Total VAT Amount £</th>
               <td className="r">{money2(totals.vat)}</td>
-              <td />
-              <td />
-              {draft && <td className="inv-x" />}
             </tr>
             <tr className="inv-total">
-              <td className="r">Invoice Total £</td>
+              <th>Invoice Total £</th>
               <td className="r">{money2(totals.total)}</td>
-              <td />
-              <td />
-              {draft && <td className="inv-x" />}
             </tr>
-          </tfoot>
+          </tbody>
         </table>
 
         <div className="inv-terms">
@@ -304,10 +323,15 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
           gap: 12px;
           flex-wrap: wrap;
           align-items: flex-end;
-          margin-bottom: 16px;
+          margin-bottom: 12px;
         }
         .inv-locked {
           margin: 0;
+          font-size: 12.5px;
+          color: var(--mid);
+        }
+        .inv-hint {
+          margin: 0 0 12px;
           font-size: 12.5px;
           color: var(--mid);
         }
@@ -347,12 +371,29 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
         }
         .inv-lines thead th { background: #eee; font-weight: 700; }
         .inv-lines .r { text-align: right; white-space: nowrap; }
-        .inv-lines tfoot td { font-weight: 700; background: #f6f6f6; }
-        .inv-lines tfoot td:empty { border: 0; background: transparent; }
-        .inv-total td { border-top: 2px solid #666; }
         /* The remove button sits outside the ruled table so the printed
            invoice keeps its four columns. */
         .inv-lines .inv-x { border: 0; padding: 0 0 0 6px; width: 1%; }
+        .inv-totals {
+          margin: 10px 0 0 auto;
+          border-collapse: collapse;
+        }
+        .inv-totals th {
+          text-align: right;
+          font-weight: 700;
+          padding: 3px 18px 3px 0;
+          color: #111;
+          white-space: nowrap;
+        }
+        .inv-totals td {
+          text-align: right;
+          padding: 3px 7px;
+          min-width: 110px;
+          color: #111;
+          font-weight: 700;
+          border-bottom: 1px solid #999;
+        }
+        .inv-totals .inv-total td { border-bottom: 3px double #333; }
         .inv-remove {
           border: 0;
           background: none;
@@ -384,16 +425,10 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
           color: #444;
         }
 
-        /* Printing: the invoice alone, and the editable fields print as plain
-           text rather than as form boxes. */
         @media print {
-          .rail,
           .inv-controls,
-          .page-head,
-          .menu-btn,
-          .rail-reveal { display: none !important; }
-          .shell { display: block !important; }
-          body { background: #fff !important; }
+          .inv-hint,
+          .inv-lines .inv-x { display: none !important; }
           .inv-sheet {
             border: 0;
             border-radius: 0;
@@ -401,8 +436,6 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
             max-width: none;
           }
           .inv-input { background: transparent; }
-          .inv-lines .inv-x { display: none; }
-          .page { padding: 0 !important; }
         }
       `}</style>
     </>

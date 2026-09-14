@@ -474,11 +474,18 @@ export async function deleteTask(id: string) {
 // --- client invoices ----------------------------------------------------
 
 /**
- * Draft the client invoice for a campaign — one line per booking line, at the
- * client charge ex VAT. It is raised as a Draft on purpose: nothing leaves the
- * building until someone has read it, edited the wording and pushed it to Xero.
+ * Save the client invoice for a campaign as a Draft.
+ *
+ * The preview page has already shown the account handler what will be created
+ * and let them edit it, so the lines they pass in are what gets saved — the
+ * derived draft is only the fallback for callers that skipped the preview.
+ * Nothing leaves the building from here: Xero is a separate, deliberate step.
  */
-export async function generateClientInvoice(campaignId: string) {
+export async function generateClientInvoice(
+  campaignId: string,
+  edited?: { campaignLineId: string | null; description: string; net: string }[],
+  clientPo?: string
+) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -497,9 +504,19 @@ export async function generateClientInvoice(campaignId: string) {
   if (!campaign) return { error: "Campaign not found." };
 
   const c = campaign as unknown as Campaign & { client_id: string | null; client_po: string | null };
-  const lines = draftInvoiceLines(c);
+  const lines = edited
+    ? edited
+        .map((l) => ({
+          campaignLineId: l.campaignLineId,
+          description: l.description.trim(),
+          net: Number(String(l.net).replace(/[^0-9.-]/g, "")) || 0,
+        }))
+        .filter((l) => l.description || l.net)
+    : draftInvoiceLines(c);
+  if (!lines.length) return { error: "An invoice needs at least one line." };
   const amount = lines.reduce((a, l) => a + l.net, 0);
   if (!amount) return { error: "Nothing to invoice — the campaign has no client charges." };
+  const po = clientPo === undefined ? c.client_po : clientPo.trim() || null;
 
   const today = new Date().toISOString().slice(0, 10);
   const invoiceDate = monthEnd(today);
@@ -514,7 +531,7 @@ export async function generateClientInvoice(campaignId: string) {
       client_id: c.client_id,
       amount_ex_vat: amount,
       outstanding: amount,
-      client_po: c.client_po,
+      client_po: po,
       invoice_date: invoiceDate,
       due_date: dueAfter(invoiceDate),
     })

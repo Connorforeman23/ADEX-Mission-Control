@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { dateGB, gbp } from "@/lib/money";
-import { generateClientInvoice, setInvoiceStatus } from "@/lib/actions";
+import { setInvoiceStatus } from "@/lib/actions";
 
 export type InvoiceRow = {
   id: string;
@@ -40,17 +40,6 @@ export default function ClientInvoices({
   const [error, setError] = useState<string | null>(null);
 
   const uninvoiced = campaigns.filter((c) => !c.invoiced && c.amount > 0);
-
-  async function generate(campaignId: string) {
-    setBusy(campaignId);
-    setError(null);
-    const res = await generateClientInvoice(campaignId);
-    setBusy(null);
-    if (res.error) return setError(res.error);
-    // Straight into the draft — it is there to be read before it goes anywhere.
-    if (res.invoiceId) return router.push(`/invoices/${res.invoiceId}`);
-    router.refresh();
-  }
 
   async function advance(inv: InvoiceRow) {
     const next = inv.status === "Draft" ? "Sent" : "Paid";
@@ -100,13 +89,9 @@ export default function ClientInvoices({
                   </div>
                   <span className="num strong">{gbp(c.amount)}</span>
                   <span className="num sub-line">+{gbp(Math.round(c.amount * 0.2))} VAT</span>
-                  <button
-                    className="btn btn-primary"
-                    disabled={busy === c.id}
-                    onClick={() => generate(c.id)}
-                  >
-                    {busy === c.id ? "Generating…" : "Generate invoice"}
-                  </button>
+                  <Link className="btn btn-primary" href={`/invoices/preview/${c.id}`}>
+                    Preview invoice
+                  </Link>
                 </div>
               ))}
             </div>

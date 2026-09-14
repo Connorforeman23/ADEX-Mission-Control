@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ADEX, type SpaceOrder } from "@/lib/po";
 import { dateGB } from "@/lib/money";
 import { saveSpaceOrderDetails } from "@/lib/actions";
+import { printAs } from "@/lib/print";
 
 // The Space Order as ADEX actually sends it, laid out to match the Word
 // document suppliers already recognise.
@@ -37,7 +38,8 @@ export default function SpaceOrderSheet({ order }: { order: SpaceOrder }) {
 
   async function saveThenPrint() {
     await save();
-    window.print();
+    // The PDF takes the order number as its name — VCC0002.pdf.
+    printAs(order.po);
   }
 
   return (
@@ -87,7 +89,7 @@ export default function SpaceOrderSheet({ order }: { order: SpaceOrder }) {
       {error && <p style={{ color: "var(--crit)", fontSize: 12.5 }}>{error}</p>}
 
       {/* The sheet itself. */}
-      <div className="so-sheet">
+      <div className="so-sheet print-sheet">
         <div className="so-logo">
           <Image src="/adex-logo.jpg" alt="adex" width={140} height={99} priority />
         </div>
@@ -152,16 +154,16 @@ export default function SpaceOrderSheet({ order }: { order: SpaceOrder }) {
               </tr>
             ))}
           </tbody>
-          {order.rows.length > 1 && (
-            <tfoot>
-              <tr>
-                <td colSpan={3}>Total</td>
-                <td className="r">{money2(order.gross)}</td>
-                <td className="r">{money2(order.net)}</td>
-                <td className="r">{money2(order.total)}</td>
-              </tr>
-            </tfoot>
-          )}
+          {/* Always closed off with a total, one row or nine — a supplier
+              reads an open-ended table as an unfinished order. */}
+          <tfoot>
+            <tr>
+              <td colSpan={3}>Total</td>
+              <td className="r">{money2(order.gross)}</td>
+              <td className="r">{money2(order.net)}</td>
+              <td className="r">{money2(order.total)}</td>
+            </tr>
+          </tfoot>
         </table>
 
         {notes.trim() && (
@@ -241,22 +243,15 @@ export default function SpaceOrderSheet({ order }: { order: SpaceOrder }) {
           color: #444;
         }
 
-        /* Printing: the sheet alone, nothing else on the page. */
+        /* Page setup lives in globals.css (.print-sheet); only the
+           sheet-specific bits are here. */
         @media print {
-          .rail,
-          .so-controls,
-          .page-head,
-          .menu-btn,
-          .rail-reveal { display: none !important; }
-          .shell { display: block !important; }
-          body { background: #fff !important; }
+          .so-controls { display: none !important; }
           .so-sheet {
             border: 0;
             border-radius: 0;
-            padding: 0;
             max-width: none;
           }
-          .page { padding: 0 !important; }
         }
       `}</style>
     </>
