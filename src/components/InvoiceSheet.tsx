@@ -40,6 +40,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
     }))
   );
   const [clientPo, setClientPo] = useState(invoice.clientPo ?? "");
+  const [invoiceNo, setInvoiceNo] = useState(invoice.invoiceNo ?? "");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveClientInvoice(invoice.id, payload(), clientPo);
+    const res = await saveClientInvoice(invoice.id, payload(), clientPo, invoiceNo);
     setBusy(false);
     if (res.error) return setError(res.error);
     setSaved(true);
@@ -98,7 +99,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
 
   async function print() {
     if (draft && !unsaved) await save();
-    printAs(`Invoice ${invoice.invoiceNo ?? invoice.campaignRef} - ${invoice.client}`);
+    printAs(`Invoice ${invoiceNo.trim() || invoice.campaignRef} - ${invoice.client}`);
   }
 
   // Saves first on purpose — Xero should receive what is on the screen, not
@@ -106,7 +107,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
   async function pushToXero() {
     setBusy(true);
     setError(null);
-    const write = await saveClientInvoice(invoice.id, payload(), clientPo);
+    const write = await saveClientInvoice(invoice.id, payload(), clientPo, invoiceNo);
     if (write.error) {
       setBusy(false);
       return setError(write.error);
@@ -133,6 +134,18 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
                 placeholder="e.g. 227936"
               />
             </label>
+            {!unsaved && (
+              <label className="field">
+                <span>Invoice number</span>
+                <input
+                  className="input num"
+                  value={invoiceNo}
+                  onChange={(e) => setInvoiceNo(e.target.value)}
+                  placeholder="From Sage — or blank for Xero to assign"
+                  style={{ minWidth: 250 }}
+                />
+              </label>
+            )}
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
               <button className="btn" onClick={addLine} disabled={busy}>
                 Add line
@@ -195,7 +208,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
             <tbody>
               <tr>
                 <th>Invoice Number</th>
-                <td className="inv-no">{invoice.invoiceNo ?? (unsaved ? "Preview" : "Draft")}</td>
+                <td className="inv-no">{invoiceNo.trim() || (unsaved ? "Preview" : "Draft")}</td>
               </tr>
               <tr>
                 <th>Invoice Date</th>

@@ -198,6 +198,9 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<XeroInvoiceR
               DueDate: invoice.dueDate ?? invoice.invoiceDate,
               // Xero's Reference shows on the invoice — the client's own PO is
               // what they will match the payment against.
+              // A number keyed in from Sage carries across; blank lets Xero
+              // continue the sequence itself.
+              ...(invoice.invoiceNo ? { InvoiceNumber: invoice.invoiceNo } : {}),
               Reference: invoice.clientPo
                 ? `PO Number ${invoice.clientPo}`
                 : invoice.campaignRef,

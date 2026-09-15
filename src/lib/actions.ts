@@ -568,7 +568,11 @@ export async function generateClientInvoice(
 export async function saveClientInvoice(
   invoiceId: string,
   lines: { campaignLineId: string | null; description: string; net: string }[],
-  clientPo: string
+  clientPo: string,
+  // Until the move from Sage to Xero, the invoice is raised in Sage and its
+  // number keyed in here so the two can be matched. Blank means "let Xero
+  // assign one" once Xero owns the sequence.
+  invoiceNo = ""
 ) {
   const supabase = await createClient();
   const {
@@ -616,6 +620,7 @@ export async function saveClientInvoice(
       amount_ex_vat: amount,
       outstanding: amount,
       client_po: clientPo.trim() || null,
+      invoice_no: invoiceNo.trim() || null,
     })
     .eq("id", invoiceId);
   if (headError) return { error: headError.message };
