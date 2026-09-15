@@ -176,7 +176,14 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<XeroInvoiceR
   }
 
   try {
-    const contact = await findOrCreateXeroContact(invoice.client);
+    // Match the client to an existing Xero contact by name. If there isn't
+    // one, the invoice is posted with the name alone and Xero creates the
+    // contact as part of accepting the invoice — which needs only the invoice
+    // permission we hold. Creating the contact ourselves would need a write
+    // permission on contacts that this connection was never granted, and Xero
+    // refuses that with the same 401 it uses for a dead connection.
+    const existing = await findXeroContact(invoice.client);
+    const contact = existing ? { ContactID: existing.ContactID } : { Name: invoice.client };
 
     const result = await xeroApi<{ Invoices?: { InvoiceID: string; InvoiceNumber?: string }[] }>(
       "/Invoices",
@@ -186,7 +193,7 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<XeroInvoiceR
           Invoices: [
             {
               Type: "ACCREC", // money owed to us
-              Contact: { ContactID: contact.ContactID },
+              Contact: contact,
               Date: invoice.invoiceDate,
               DueDate: invoice.dueDate ?? invoice.invoiceDate,
               // Xero's Reference shows on the invoice — the client's own PO is
@@ -245,18 +252,9 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<XeroInvoiceR
   }
 }
 
-/** The client as Xero knows them, created if Xero has never seen them. */
-async function findOrCreateXeroContact(name: string) {
+/** The client as Xero already knows them, or null. Read-only on purpose. */
+async function findXeroContact(name: string): Promise<XeroContact | null> {
   const where = encodeURIComponent(`Name=="${name.replace(/"/g, '\\"')}"`);
   const found = await xeroApi<{ Contacts?: XeroContact[] }>(`/Contacts?where=${where}`);
-  const match = found.Contacts?.[0];
-  if (match) return match;
-
-  const created = await xeroApi<{ Contacts?: XeroContact[] }>("/Contacts", {
-    method: "POST",
-    body: JSON.stringify({ Contacts: [{ Name: name }] }),
-  });
-  const contact = created.Contacts?.[0];
-  if (!contact) throw new Error(`Could not find or create "${name}" in Xero.`);
-  return contact;
+  return found.Contacts?.[0] ?? null;
 }

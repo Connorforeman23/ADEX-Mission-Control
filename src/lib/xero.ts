@@ -193,12 +193,16 @@ export async function xeroApi<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
-    // 401 with a live token means Xero no longer recognises the organisation —
-    // the Demo Company resets itself every 28 days and drops the connection.
-    // Raw JSON here helps nobody; say what to do about it.
+    // Xero answers 401 for two quite different things: a connection it no
+    // longer recognises (the Demo Company resets every 28 days) and a call the
+    // connection was never given permission for. Say both, and name the call,
+    // so the next person doesn't chase the wrong one. Raw JSON helps nobody.
     if (res.status === 401 || res.status === 403) {
+      const method = init?.method ?? "GET";
       throw new Error(
-        "Xero has dropped the connection. Go to Settings → Xero, disconnect and connect again."
+        `Xero refused ${method} ${path.split("?")[0]} (${res.status}). Either the connection has ` +
+          "dropped — Settings → Xero, disconnect and connect again — or this action needs a " +
+          "permission the connection doesn't have."
       );
     }
     throw new Error(`Xero API ${path} failed (${res.status}): ${await res.text()}`);
