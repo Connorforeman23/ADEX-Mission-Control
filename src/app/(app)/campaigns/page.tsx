@@ -7,12 +7,25 @@ export const dynamic = "force-dynamic";
 export default async function CampaignsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string; open?: string }>;
+  searchParams: Promise<{ new?: string; open?: string; client?: string }>;
 }) {
   const supabase = await createClient();
   const [campaigns, { data: clients }, { data: staff }, params, profile] = await Promise.all([
     getCampaigns(),
-    supabase.from("clients").select("id, name").order("name"),
+    // Organisations, not the old clients table: Rick couldn't find Sarah Raven
+    // in the dropdown because she exists as an organisation (created via the
+    // pipeline) but was never written to `clients`. Organisations are the
+    // master company record now.
+    //
+    // But only the ones we sell to. A company that is purely a supplier has
+    // customer_status "none" and has no business in a client dropdown — Rick
+    // found ITV and JCDecaux offered as clients.
+    supabase
+      .from("organisations")
+      .select("id, name")
+      .eq("archived", false)
+      .neq("customer_status", "none")
+      .order("name"),
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
     searchParams,
     getMyProfile(),
@@ -39,6 +52,7 @@ export default async function CampaignsPage({
         openNew={params.new === "1"}
         openId={params.open}
         canBook={canBook}
+        prefillClient={params.client ?? ""}
       />
     </div>
   );

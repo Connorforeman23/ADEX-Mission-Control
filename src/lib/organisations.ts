@@ -19,6 +19,8 @@ export type OrganisationRow = {
   profit: number;
   margin: number;
   supplier_spend: number;
+  /** Channels booked for this client, shown as pills on the card view. */
+  channels: string[];
 };
 
 /** The customer lifecycle, in the words the team uses. */
@@ -30,6 +32,15 @@ export const CUSTOMER_STATUS_LABEL: Record<string, string> = {
   none: "No customer relationship",
 };
 
+/** Badge colour per lifecycle stage — shared by every view that shows one. */
+export const CUSTOMER_STATUS_CLASS: Record<string, string> = {
+  active_client: "live",
+  prospect: "planning",
+  former_client: "done",
+  not_pursuing: "risk",
+  none: "done",
+};
+
 // --- detail view ---------------------------------------------------------
 
 export type OrgContact = {
@@ -38,7 +49,6 @@ export type OrgContact = {
   job_title: string | null;
   email: string | null;
   phone: string | null;
-  status: string;
 };
 
 export type OrgOpportunity = {
@@ -88,6 +98,14 @@ export type OrganisationDetail = {
   archived: boolean;
   companies_house_no: string | null;
   website: string | null;
+  ownerId: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  postcode: string | null;
+  country: string | null;
+  phone: string | null;
+  notes: string | null;
   contacts: OrgContact[];
   opportunities: OrgOpportunity[];
   campaigns: OrgCampaign[];

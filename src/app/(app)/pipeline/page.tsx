@@ -13,19 +13,21 @@ type LeadRecord = {
   stage: string;
   next_action: string | null;
   owner_id: string | null;
+  channels: string[] | null;
+  proposal_note: string | null;
   profiles: { full_name: string } | null;
 };
 
 export default async function PipelinePage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; org?: string }>;
 }) {
   const supabase = await createClient();
   const [{ data: leadRows }, { data: staff }, params] = await Promise.all([
     supabase
       .from("leads")
-      .select("id, name, contact, sector, value, stage, next_action, owner_id, profiles ( full_name )")
+      .select("id, name, contact, sector, value, stage, next_action, owner_id, channels, proposal_note, profiles ( full_name )")
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
     searchParams,
@@ -41,6 +43,8 @@ export default async function PipelinePage({
     next_action: l.next_action,
     owner: l.profiles?.full_name ?? "—",
     ownerId: l.owner_id ?? "",
+    channels: l.channels ?? [],
+    proposalNote: l.proposal_note,
   }));
 
   const open = leads.filter((l) => l.stage === "Engaged" || l.stage === "Proposal");
@@ -86,7 +90,7 @@ export default async function PipelinePage({
         </div>
       </div>
 
-      <PipelineBoard leads={leads} staff={staff ?? []} openNew={params.new === "1"} />
+      <PipelineBoard leads={leads} staff={staff ?? []} openNew={params.new === "1"} prefillOrg={params.org ?? ""} />
     </div>
   );
 }

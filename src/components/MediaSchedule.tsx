@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { CHANNEL_COLOUR, channelLabel, dateShortGB, gbp, rangeGB } from "@/lib/money";
 
 export type PlanLine = {
@@ -198,6 +199,16 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
                         <div className="sched-label">
                           <p>{i === 0 ? clientName : " "}</p>
                           <small>
+                            {/* Through to the campaign — the plan is where a
+                                question about a booking usually starts. */}
+                            <Link
+                              href={`/campaigns?open=${l.campaignId}`}
+                              style={{ color: "var(--blue)" }}
+                              title={`Open campaign ${l.campaignRef}`}
+                            >
+                              {l.campaignRef}
+                            </Link>
+                            {" · "}
                             {l.vendor} · {channelLabel(l.channel)}
                           </small>
                         </div>

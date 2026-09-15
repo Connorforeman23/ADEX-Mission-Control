@@ -234,6 +234,60 @@ tbody tr:hover { background: var(--blue-wash); }
 .card-head .sub { font-size: 11.5px; color: var(--faint); }
 .card-body { padding: 14px 16px 16px; }
 
+/* Cards sitting straight on a page need their own spacing — the ones inside
+   .cols get it from the grid gap, which is why stacked cards used to touch. */
+.page > .card { margin-bottom: 14px; }
+
+/* Company cards. These styles lived inside the old ClientTable component and
+   were lost when it was retired, leaving the markup with nothing behind it —
+   so the cards rendered full width with the figures stacked. Moved here so
+   they belong to the app rather than to one deleted component. */
+.client-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(292px, 1fr));
+  gap: 14px;
+}
+.client-figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 14px 0 0;
+}
+.client-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Minimise / expand control on a collapsible card. */
+.card-toggle {
+  margin-left: auto;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  flex: none;
+}
+.card-toggle:hover { background: var(--surface-2); color: var(--text); }
+.card-toggle svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Collapsed: the head alone, with its usual bottom padding restored. */
+.card.is-collapsed .card-head { padding-bottom: 12px; }
+
 .empty-note { margin: 0; color: var(--faint); font-size: 12.5px; line-height: 1.6; }
 
 /* ---- tables ---- */
@@ -354,6 +408,12 @@ td.r, th.r { text-align: right; }
   color: var(--faint); border: 1px solid transparent; transition: background .12s, color .12s;
 }
 .row-edit:hover { background: var(--blue-wash); color: var(--blue); border-color: var(--line); }
+/* A name that opens its record — looks like text, acts like a link. */
+.link-btn {
+  border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit;
+  cursor: pointer; text-align: left;
+}
+.link-btn:hover { color: var(--blue); text-decoration: underline; }
 .avatar-sm {
   width: 28px; height: 28px; border-radius: 8px; flex: none; display: grid; place-items: center;
   font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #fff;
@@ -367,4 +427,37 @@ td.r, th.r { text-align: right; }
 .row-edit svg {
   width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.7; fill: none;
   stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* --- Printing the Space Order and the invoice ---------------------------
+   One rule set for both documents, so they behave the same on paper.
+
+   @page with no margin is what removes the browser's own header and footer
+   (URL, date, "1/2") — they print in the margin, and with none they have
+   nowhere to go. The sheet then supplies its own margin via padding. */
+@page {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  .rail,
+  .menu-btn,
+  .rail-reveal,
+  .page-head,
+  .dev-banner { display: none !important; }
+  .shell { display: block !important; }
+  body { background: #fff !important; }
+  .page { padding: 0 !important; }
+  main { padding: 0 !important; }
+
+  .print-sheet {
+    padding: 16mm 14mm !important;
+    font-size: 11.5px !important;
+  }
+  /* Keep a row, and the totals, whole — never split across a page. */
+  .print-sheet table { page-break-inside: auto; }
+  .print-sheet tr { page-break-inside: avoid; break-inside: avoid; }
+  .print-sheet thead { display: table-header-group; }
+  .print-sheet tfoot { display: table-footer-group; }
+  .print-sheet img { max-height: 70px; width: auto; }
 }

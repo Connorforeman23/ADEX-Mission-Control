@@ -6,7 +6,7 @@ import Drawer from "@/components/Drawer";
 import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
 import { useBoardDrag } from "@/components/useBoardDrag";
-import { gbp, gbpK } from "@/lib/money";
+import { CHANNELS, channelLabel, gbp, gbpK } from "@/lib/money";
 import { deleteLead, moveLeadStage, saveLead, type LeadInput } from "@/lib/actions";
 
 export type LeadRow = {
@@ -19,6 +19,9 @@ export type LeadRow = {
   next_action: string | null;
   owner: string;
   ownerId: string;
+  /** Which channels are being offered — enough to tell one deal from another. */
+  channels: string[];
+  proposalNote: string | null;
 };
 
 // Closed Lost is recorded but never counted toward any projection.
@@ -48,21 +51,28 @@ const blank = (ownerId: string): LeadInput => ({
   stage: "Engaged",
   ownerId,
   nextAction: "",
+  channels: [],
+  proposalNote: "",
 });
 
 export default function PipelineBoard({
   leads,
   staff,
   openNew,
+  prefillOrg = "",
 }: {
   leads: LeadRow[];
   staff: { id: string; full_name: string }[];
   openNew?: boolean;
+  /** Company carried through from an organisation page. */
+  prefillOrg?: string;
 }) {
   const router = useRouter();
   const [owner, setOwner] = useState("All");
   const [view, setView] = useState<"board" | "list" | "forecast">("board");
-  const [editing, setEditing] = useState<LeadInput | null>(openNew ? blank(staff[0]?.id ?? "") : null);
+  const [editing, setEditing] = useState<LeadInput | null>(
+    openNew ? { ...blank(staff[0]?.id ?? ""), name: prefillOrg } : null
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,7 +89,12 @@ export default function PipelineBoard({
   }
 
   async function move(id: string, stage: string) {
-    await moveLeadStage(id, stage);
+    setError(null);
+    // Moving to Closed Won creates the client, the campaign and the booking
+    // task. If any of that fails the user needs to know — it used to fail
+    // silently and look like nothing had happened.
+    const res = await moveLeadStage(id, stage);
+    if (res?.error) setError(res.error);
     router.refresh();
   }
 
@@ -106,6 +121,8 @@ export default function PipelineBoard({
       stage: l.stage,
       ownerId: l.ownerId,
       nextAction: l.next_action ?? "",
+      channels: l.channels ?? [],
+      proposalNote: l.proposalNote ?? "",
     });
   }
 
@@ -142,6 +159,16 @@ export default function PipelineBoard({
           </button>
         </div>
       </div>
+
+      {/* Board-level problems — the drawer has its own message, but a failure
+          while dragging a card must be visible without opening anything. */}
+      {error && !editing && (
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-body">
+            <p style={{ color: "var(--crit)", fontSize: 12.5, margin: 0 }}>{error}</p>
+          </div>
+        </section>
+      )}
 
       {view === "board" && (
         <div className="board">
@@ -190,6 +217,15 @@ export default function PipelineBoard({
                         {l.contact ?? "—"}
                         {l.sector ? ` · ${l.sector}` : ""}
                       </div>
+                      {l.channels.length > 0 && (
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 7 }}>
+                          {l.channels.map((ch) => (
+                            <span className="pill" key={ch}>
+                              {channelLabel(ch)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="tile-foot">
                         <span className="num strong">{gbp(Number(l.value))}</span>
                         <span className="sub-line">{l.owner}</span>
@@ -387,6 +423,50 @@ export default function PipelineBoard({
                 />
               </label>
             </div>
+
+            {/* What's being offered. Deliberately light — channels and a note,
+                not a line-level quote. Whether opportunities should carry full
+                campaign detail is still an open question with Rick. */}
+            <div>
+              <div className="eyebrow" style={{ marginBottom: 7 }}>
+                What&rsquo;s being offered
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {CHANNELS.map((ch) => {
+                  const on = editing.channels.includes(ch);
+                  return (
+                    <button
+                      type="button"
+                      key={ch}
+                      className={on ? "btn btn-primary" : "btn"}
+                      style={{ padding: "5px 10px", fontSize: 12 }}
+                      aria-pressed={on}
+                      onClick={() =>
+                        setEditing({
+                          ...editing,
+                          channels: on
+                            ? editing.channels.filter((c) => c !== ch)
+                            : [...editing.channels, ch],
+                        })
+                      }
+                    >
+                      {channelLabel(ch)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="field wide">
+              <span>Proposal notes</span>
+              <textarea
+                className="input"
+                rows={2}
+                value={editing.proposalNote}
+                onChange={(e) => setEditing({ ...editing, proposalNote: e.target.value })}
+                placeholder="e.g. One full-page press ad plus a series of emails, £10k all in"
+              />
+            </label>
 
             {editing.id && (
               <FollowUp

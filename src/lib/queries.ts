@@ -1,5 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Campaign } from "@/lib/money";
+import { VAT_RATE, type Campaign } from "@/lib/money";
+import { spaceOrderRows, type SpaceOrder } from "@/lib/po";
+import {
+  draftInvoiceLines,
+  dueAfter,
+  invoiceTotals,
+  monthEnd,
+  type ClientInvoice,
+  type InvoiceLine,
+} from "@/lib/invoice";
 // Row type lives in lib/organisations.ts (no server imports) so client
 // components can use it without pulling this module into the browser bundle.
 import type {
@@ -21,9 +30,9 @@ export async function getCampaigns(): Promise<Campaign[]> {
       `id, ref, name, status, region, start_date, end_date, fee, billed, leads, cpl, client_po,
        clients ( name ),
        profiles ( full_name ),
-       campaign_lines ( id, channel, vendor, detail, line_type, start_date, end_date, selected_dates,
+       campaign_lines ( id, channel, vendor, publication, detail, line_type, start_date, end_date, selected_dates,
                         cpt, ooh_format, ooh_disp_type, copy_instruction, urn, supplier_po,
-                        supplier_gross, supplier_net, client_charge )`
+                        supplier_gross, supplier_net, client_charge, space_order_id )`
     )
     .order("start_date", { ascending: false, nullsFirst: false });
 
@@ -230,7 +239,7 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     supabase.from("contacts").select("organisation_id"),
     supabase
       .from("campaigns")
-      .select("id, fee, client_org_id, campaign_lines ( client_charge, supplier_net )"),
+      .select("id, fee, client_org_id, campaign_lines ( client_charge, supplier_net, channel )"),
     supabase.from("campaign_lines").select("supplier_org_id, supplier_net"),
   ]);
 
@@ -254,13 +263,14 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     if (c.organisation_id) contactCount.set(c.organisation_id, (contactCount.get(c.organisation_id) ?? 0) + 1);
   }
 
+  const channels = new Map<string, Set<string>>();
   const campaignCount = new Map<string, number>();
   const billings = new Map<string, number>();
   const cost = new Map<string, number>();
   type CampRaw = {
     client_org_id: string | null;
     fee: number;
-    campaign_lines: { client_charge: number; supplier_net: number }[];
+    campaign_lines: { client_charge: number; supplier_net: number; channel: string }[];
   };
   for (const c of (campaignsRes.data ?? []) as unknown as CampRaw[]) {
     if (!c.client_org_id) continue;
@@ -270,6 +280,9 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     const net = lines.reduce((a, l) => a + Number(l.supplier_net), 0);
     billings.set(c.client_org_id, (billings.get(c.client_org_id) ?? 0) + value);
     cost.set(c.client_org_id, (cost.get(c.client_org_id) ?? 0) + net);
+    const set = channels.get(c.client_org_id) ?? new Set<string>();
+    lines.forEach((l) => l.channel && set.add(l.channel));
+    channels.set(c.client_org_id, set);
   }
 
   const spend = new Map<string, number>();
@@ -295,6 +308,7 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
       profit,
       margin: gross ? (profit / gross) * 100 : 0,
       supplier_spend: spend.get(o.id) ?? 0,
+      channels: [...(channels.get(o.id) ?? [])],
     };
   });
 }
@@ -306,7 +320,7 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
   const { data: org, error } = await supabase
     .from("organisations")
     .select(
-      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, profiles ( full_name )"
+      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, owner_id, address_line1, address_line2, city, postcode, country, phone, notes, profiles ( full_name )"
     )
     .eq("id", id)
     .maybeSingle();
@@ -316,7 +330,7 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
   const [contactsRes, oppsRes, campsRes, invRes, histRes, spendRes] = await Promise.all([
     supabase
       .from("contacts")
-      .select("id, first_name, last_name, job_title, email, phone, status")
+      .select("id, first_name, last_name, job_title, email, phone")
       .eq("organisation_id", id)
       .order("first_name"),
     supabase
@@ -355,17 +369,24 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
     archived: Boolean(o.archived),
     companies_house_no: (o.companies_house_no as string | null) ?? null,
     website: (o.website as string | null) ?? null,
+    ownerId: (o.owner_id as string | null) ?? null,
+    addressLine1: (o.address_line1 as string | null) ?? null,
+    addressLine2: (o.address_line2 as string | null) ?? null,
+    city: (o.city as string | null) ?? null,
+    postcode: (o.postcode as string | null) ?? null,
+    country: (o.country as string | null) ?? null,
+    phone: (o.phone as string | null) ?? null,
+    notes: (o.notes as string | null) ?? null,
 
     contacts: ((contactsRes.data ?? []) as unknown as {
       id: string; first_name: string; last_name: string | null;
-      job_title: string | null; email: string | null; phone: string | null; status: string;
+      job_title: string | null; email: string | null; phone: string | null;
     }[]).map((c) => ({
       id: c.id,
       name: [c.first_name, c.last_name].filter(Boolean).join(" "),
       job_title: c.job_title,
       email: c.email,
       phone: c.phone,
-      status: c.status,
     })),
 
     opportunities: ((oppsRes.data ?? []) as unknown as {
@@ -416,5 +437,320 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
       (a, l) => a + Number(l.supplier_net),
       0
     ),
+  };
+}
+
+
+/**
+ * One Space Order — every booking line for a single supplier on a campaign.
+ *
+ * Per Rick: the order is per SUPPLIER, not per line. ITV1 and ITVQuiz are
+ * separate lines at different rates but go on one order to ITV.
+ */
+export async function getSpaceOrder(orderId: string): Promise<SpaceOrder | null> {
+  const supabase = await createClient();
+
+  const { data: order, error } = await supabase
+    .from("space_orders")
+    .select(
+      `id, campaign_id, supplier_org_id, supplier_name, order_number, supplier_contact, order_notes,
+       campaigns ( ref, name, clients ( name ), profiles ( full_name, email ) )`
+    )
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("getSpaceOrder", error.message);
+    return null;
+  }
+  if (!order) return null;
+
+  type OrderRaw = {
+    id: string;
+    campaign_id: string;
+    supplier_org_id: string | null;
+    supplier_name: string;
+    order_number: string | null;
+    supplier_contact: string | null;
+    order_notes: string | null;
+    campaigns: {
+      ref: string;
+      name: string;
+      clients: { name: string } | null;
+      profiles: { full_name: string; email: string } | null;
+    } | null;
+  };
+  const o = order as unknown as OrderRaw;
+
+  const { data: lineData } = await supabase
+    .from("campaign_lines")
+    .select(
+      `id, channel, vendor, publication, line_type, detail, selected_dates, start_date, end_date,
+       supplier_gross, commission_pct, copy_instruction, urn, ooh_format, ooh_disp_type`
+    )
+    .eq("space_order_id", orderId)
+    .order("start_date");
+
+  type LineRaw = {
+    id: string;
+    channel: string;
+    vendor: string;
+    publication: string | null;
+    line_type: string | null;
+    detail: string | null;
+    selected_dates: string | null;
+    start_date: string;
+    end_date: string;
+    supplier_gross: number;
+    commission_pct: number;
+    copy_instruction: string | null;
+    urn: string | null;
+    ooh_format: string | null;
+    ooh_disp_type: string | null;
+  };
+  const lines = (lineData ?? []) as unknown as LineRaw[];
+
+  // Every line on the order becomes its own set of dated rows.
+  const rows = lines.flatMap((l) => {
+    const detail =
+      l.channel === "OOH" && l.ooh_format
+        ? `${l.detail ?? ""}${l.detail ? " · " : ""}${l.ooh_format} (${l.ooh_disp_type ?? "Static"})`
+        : l.detail ?? "";
+    // The Media column carries the publication or site, not the media owner —
+    // FTWM rather than FT, M4 Tower rather than JCDecaux.
+    return spaceOrderRows(
+      (l.publication ?? "").trim() || l.vendor,
+      detail,
+      l.selected_dates,
+      l.start_date,
+      l.end_date,
+      Number(l.supplier_gross),
+      Number(l.commission_pct),
+      l.line_type === "production"
+    );
+  });
+
+  // Production rows print no gross, so they must not be counted in the gross
+  // total either — otherwise the column doesn't add up to the figure below it.
+  const gross = lines
+    .filter((l) => l.line_type !== "production")
+    .reduce((a, l) => a + Number(l.supplier_gross), 0);
+  const net = lines.reduce(
+    (a, l) => a + Number(l.supplier_gross) * (1 - Number(l.commission_pct) / 100),
+    0
+  );
+  const vat = net * VAT_RATE;
+
+  // Commission is per line; show a single figure when they agree, a range when
+  // they don't, rather than quietly implying one rate applies to everything.
+  const rates = [...new Set(lines.map((l) => Number(l.commission_pct)))];
+  const commissionPct = rates.length === 1 ? rates[0] : Math.max(...rates);
+
+  const copies = [...new Set(lines.map((l) =>
+    l.urn ? `${l.copy_instruction ?? "New Copy"} · URN ${l.urn}` : l.copy_instruction ?? "New Copy"
+  ))];
+
+  let contacts: { id: string; name: string }[] = [];
+  if (o.supplier_org_id) {
+    const { data: people } = await supabase
+      .from("contacts")
+      .select("id, first_name, last_name")
+      .eq("organisation_id", o.supplier_org_id)
+      .order("first_name");
+    contacts = ((people ?? []) as { id: string; first_name: string; last_name: string | null }[]).map(
+      (p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(" ") })
+    );
+  }
+
+  return {
+    lineId: o.id,
+    po: o.order_number ?? "—",
+    supplier: o.supplier_name,
+    supplierOrgId: o.supplier_org_id,
+    supplierContact: o.supplier_contact ?? "",
+    fromName: o.campaigns?.profiles?.full_name ?? "—",
+    fromEmail: o.campaigns?.profiles?.email ?? "",
+    date: new Date().toISOString().slice(0, 10),
+    client: o.campaigns?.clients?.name ?? "—",
+    summary: `${o.supplier_name}${rows.length > 1 ? ` x${rows.length}` : ""}${
+      lines.length > 1 ? ` · ${lines.length} lines` : ""
+    }`,
+    commissionPct,
+    copy: copies.join(" / "),
+    orderNotes: o.order_notes ?? "",
+    rows,
+    gross,
+    net,
+    vat,
+    total: net + vat,
+    contacts,
+  };
+}
+
+// --- client invoice ------------------------------------------------------
+
+/**
+ * One client invoice with its lines, ready to print or push to Xero.
+ *
+ * The client's address comes from the organisation record rather than the
+ * older clients table, which never held one. They are matched by name — the
+ * same way 0006 built organisations out of clients in the first place.
+ */
+export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice | null> {
+  const supabase = await createClient();
+
+  const { data: invoice, error } = await supabase
+    .from("client_invoices")
+    .select(
+      `id, campaign_id, invoice_no, invoice_date, due_date, status, client_po, xero_id,
+       campaigns ( ref, name, client_po, clients ( name ) )`
+    )
+    .eq("id", invoiceId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("getClientInvoice", error.message);
+    return null;
+  }
+  if (!invoice) return null;
+
+  type InvoiceRaw = {
+    id: string;
+    campaign_id: string | null;
+    invoice_no: string | null;
+    invoice_date: string;
+    due_date: string | null;
+    status: string;
+    client_po: string | null;
+    xero_id: string | null;
+    campaigns: {
+      ref: string;
+      name: string;
+      client_po: string | null;
+      clients: { name: string } | null;
+    } | null;
+  };
+  const inv = invoice as unknown as InvoiceRaw;
+  const client = inv.campaigns?.clients?.name ?? "—";
+
+  const [{ data: lineData }, clientAddress] = await Promise.all([
+    supabase
+      .from("client_invoice_lines")
+      .select("id, campaign_line_id, description, net")
+      .eq("invoice_id", invoiceId)
+      .order("sort_order"),
+    clientAddressFor(supabase, client),
+  ]);
+
+  type LineRaw = {
+    id: string;
+    campaign_line_id: string | null;
+    description: string;
+    net: number;
+  };
+  const lines: InvoiceLine[] = ((lineData ?? []) as LineRaw[]).map((l) => ({
+    id: l.id,
+    campaignLineId: l.campaign_line_id,
+    description: l.description,
+    net: Number(l.net),
+  }));
+
+  const { net, vat, total } = invoiceTotals(lines);
+
+  return {
+    id: inv.id,
+    invoiceNo: inv.invoice_no,
+    invoiceDate: inv.invoice_date,
+    dueDate: inv.due_date,
+    status: inv.status,
+    xeroId: inv.xero_id,
+    clientPo: inv.client_po ?? inv.campaigns?.client_po ?? null,
+    client,
+    clientAddress,
+    campaignId: inv.campaign_id,
+    campaignRef: inv.campaigns?.ref ?? "—",
+    campaignName: inv.campaigns?.name ?? "(deleted campaign)",
+    lines,
+    net,
+    vat,
+    total,
+  };
+}
+
+/** The client's address block, from their organisation record — matched by name. */
+async function clientAddressFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  client: string
+): Promise<string[]> {
+  const { data: org } = await supabase
+    .from("organisations")
+    .select("address_line1, address_line2, city, postcode, country")
+    .ilike("name", client)
+    .maybeSingle();
+
+  type OrgRaw = {
+    address_line1: string | null;
+    address_line2: string | null;
+    city: string | null;
+    postcode: string | null;
+    country: string | null;
+  };
+  const a = (org ?? null) as OrgRaw | null;
+  return [a?.address_line1, a?.address_line2, a?.city, a?.country, a?.postcode]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean);
+}
+
+/**
+ * The invoice a campaign WOULD produce, with nothing written anywhere.
+ *
+ * Rick's point: check it before the record exists, not after. So this builds
+ * the same document from the campaign alone; "Save as draft" on that page is
+ * what creates the row. The empty id is how the sheet knows it is unsaved.
+ */
+export async function getInvoicePreview(campaignId: string): Promise<ClientInvoice | null> {
+  const supabase = await createClient();
+
+  const { data: campaign, error } = await supabase
+    .from("campaigns")
+    .select(
+      `id, ref, name, fee, client_po, clients ( name ),
+       campaign_lines ( id, channel, vendor, publication, detail, line_type,
+                        start_date, end_date, client_charge, supplier_gross, supplier_net )`
+    )
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("getInvoicePreview", error.message);
+    return null;
+  }
+  if (!campaign) return null;
+
+  const c = campaign as unknown as Campaign & { client_po: string | null };
+  const client = c.clients?.name ?? "—";
+  const lines = draftInvoiceLines(c);
+  const clientAddress = await clientAddressFor(supabase, client);
+
+  const invoiceDate = monthEnd(new Date().toISOString().slice(0, 10));
+  const { net, vat, total } = invoiceTotals(lines);
+
+  return {
+    id: "",
+    invoiceNo: null,
+    invoiceDate,
+    dueDate: dueAfter(invoiceDate),
+    status: "Draft",
+    xeroId: null,
+    clientPo: c.client_po,
+    client,
+    clientAddress,
+    campaignId: c.id,
+    campaignRef: c.ref,
+    campaignName: c.name,
+    lines,
+    net,
+    vat,
+    total,
   };
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 // Admin-only view of the audit trail. Reads audit_log directly — RLS allows
 // only admins to select it, so this renders empty (or errors) for anyone else,
@@ -69,11 +70,7 @@ export default function ActivityLog() {
   }, [load]);
 
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Activity log</h2>
-        <span className="sub">Last 50 changes</span>
-      </div>
+    <CollapsibleCard id="activity-log" title="Activity log" sub="Last 50 changes">
       <div className="card-body">
         {error && <p style={{ color: "var(--crit)", fontSize: 12.5, marginBottom: 12 }}>{error}</p>}
         {loading ? (
@@ -106,6 +103,6 @@ export default function ActivityLog() {
           </div>
         )}
       </div>
-    </section>
+    </CollapsibleCard>
   );
 }

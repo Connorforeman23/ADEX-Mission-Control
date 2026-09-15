@@ -2,12 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { draftInvoiceLines, dueAfter, monthEnd } from "@/lib/invoice";
+import type { Campaign } from "@/lib/money";
 
 export type LineInput = {
   id?: string;
   line_type: "media" | "production";
   channel: string;
   vendor: string;
+  /** The publication or site booked — FTWM, M4 Tower. Shown on the Space Order. */
+  publication: string;
   detail: string;
   start_date: string;
   end_date: string;
@@ -62,16 +66,22 @@ const RESTRICTED_NO_BOOKING =
   "Booking media is handled by the wider team. As a restricted user you can manage your own " +
   "clients and prospects, but not raise campaigns or purchase orders — ask an admin to book for you.";
 
-/** Next reference in the AE-#### series. */
+/**
+ * Next reference in the AE-#### series, from an atomic counter.
+ *
+ * This used to read the highest existing ref and add one, sorted as text —
+ * which meant the seeded TST-0005 campaigns always won ("T" > "A"), so every
+ * booking was offered AE-6 and the second one collided. Text sorting also
+ * breaks at 999→1000, and two simultaneous bookings could read the same value.
+ */
 async function nextRef(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data } = await supabase
-    .from("campaigns")
-    .select("ref")
-    .order("ref", { ascending: false })
-    .limit(1);
-  const last = data?.[0]?.ref as string | undefined;
-  const n = last ? parseInt(last.replace(/\D/g, ""), 10) : 2600;
-  return `AE-${(Number.isFinite(n) ? n : 2600) + 1}`;
+  const { data, error } = await supabase.rpc("next_campaign_ref");
+  if (error || typeof data !== "string") {
+    throw new Error(
+      `Couldn't allocate a campaign reference: ${error?.message ?? "unexpected response"}`
+    );
+  }
+  return data;
 }
 
 export async function createCampaign(input: CampaignInput) {
@@ -193,6 +203,9 @@ export async function createCampaign(input: CampaignInput) {
     inserted.push({ vendor: l.vendor, po: supplierPo });
   }
 
+  // One Space Order per supplier, so the booking can actually be sent out.
+  await syncSpaceOrders(supabase, campaign.id);
+
   // New copy → creative brief plus a follow-up task for whoever handles design:
   // in-house goes to James Beach; client-supplied goes back to the sales owner.
   if (needsCreative) {
@@ -250,6 +263,7 @@ function lineRow(l: LineInput) {
     channel: l.channel,
     line_type: l.line_type,
     vendor: l.vendor.trim(),
+    publication: l.publication.trim() || null,
     detail: l.detail.trim() || null,
     start_date: l.start_date,
     end_date: l.end_date,
@@ -351,6 +365,9 @@ export async function updateCampaign(campaignId: string, input: CampaignInput) {
   }
 
   revalidatePath("/campaigns");
+  // Editing can add a supplier or remove one, so re-sync the orders.
+  await syncSpaceOrders(supabase, campaignId);
+
   revalidatePath(`/campaigns/${campaignId}`);
   revalidatePath("/");
   return { id: campaignId };
@@ -456,8 +473,19 @@ export async function deleteTask(id: string) {
 
 // --- client invoices ----------------------------------------------------
 
-/** Raise the client invoice for a campaign at its gross ex VAT. */
-export async function generateClientInvoice(campaignId: string) {
+/**
+ * Save the client invoice for a campaign as a Draft.
+ *
+ * The preview page has already shown the account handler what will be created
+ * and let them edit it, so the lines they pass in are what gets saved — the
+ * derived draft is only the fallback for callers that skipped the preview.
+ * Nothing leaves the building from here: Xero is a separate, deliberate step.
+ */
+export async function generateClientInvoice(
+  campaignId: string,
+  edited?: { campaignLineId: string | null; description: string; net: string }[],
+  clientPo?: string
+) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -466,25 +494,138 @@ export async function generateClientInvoice(campaignId: string) {
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, ref, fee, campaign_lines ( client_charge )")
+    .select(
+      `id, ref, name, fee, client_id, client_po,
+       campaign_lines ( id, channel, vendor, publication, detail, line_type,
+                        start_date, end_date, client_charge, supplier_gross, supplier_net )`
+    )
     .eq("id", campaignId)
     .maybeSingle();
   if (!campaign) return { error: "Campaign not found." };
 
-  type Row = { fee: number; campaign_lines: { client_charge: number }[] };
-  const c = campaign as unknown as Row & { ref: string };
-  const amount =
-    c.campaign_lines.reduce((a, l) => a + Number(l.client_charge), 0) + Number(c.fee);
+  const c = campaign as unknown as Campaign & { client_id: string | null; client_po: string | null };
+  const lines = edited
+    ? edited
+        .map((l) => ({
+          campaignLineId: l.campaignLineId,
+          description: l.description.trim(),
+          net: Number(String(l.net).replace(/[^0-9.-]/g, "")) || 0,
+        }))
+        .filter((l) => l.description || l.net)
+    : draftInvoiceLines(c);
+  if (!lines.length) return { error: "An invoice needs at least one line." };
+  const amount = lines.reduce((a, l) => a + l.net, 0);
   if (!amount) return { error: "Nothing to invoice — the campaign has no client charges." };
+  const po = clientPo === undefined ? c.client_po : clientPo.trim() || null;
 
-  const { data: invoiceNo } = await supabase.rpc("next_po_number", { p_prefix: "INV" });
+  const today = new Date().toISOString().slice(0, 10);
+  const invoiceDate = monthEnd(today);
 
-  const { error } = await supabase.from("client_invoices").insert({
-    campaign_id: campaignId,
-    invoice_no: typeof invoiceNo === "string" ? invoiceNo : null,
-    amount_ex_vat: amount,
-  });
+  // No number is minted here. ADEX's invoices run one sequence — 18824, 18825,
+  // 18826 — owned by Xero, so the number is whatever Xero returns when the
+  // draft is pushed. Two systems both handing out numbers would collide.
+  const { data: created, error } = await supabase
+    .from("client_invoices")
+    .insert({
+      campaign_id: campaignId,
+      client_id: c.client_id,
+      amount_ex_vat: amount,
+      outstanding: amount,
+      client_po: po,
+      invoice_date: invoiceDate,
+      due_date: dueAfter(invoiceDate),
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
+
+  const invoiceId = (created as { id: string }).id;
+  const { error: lineError } = await supabase.from("client_invoice_lines").insert(
+    lines.map((l, i) => ({
+      invoice_id: invoiceId,
+      campaign_line_id: l.campaignLineId,
+      description: l.description,
+      net: l.net,
+      sort_order: i,
+    }))
+  );
+  // A header with no lines would print as a blank invoice, which is worse than
+  // no invoice at all — so take it back out rather than leave it half-made.
+  if (lineError) {
+    await supabase.from("client_invoices").delete().eq("id", invoiceId);
+    return { error: lineError.message };
+  }
+
+  revalidatePath("/finance");
+  return { invoiceId };
+}
+
+/**
+ * Save the edited invoice. Lines are replaced wholesale rather than diffed —
+ * the account handler reorders, merges and rewrites them, so matching up the
+ * old rows would be guesswork.
+ */
+export async function saveClientInvoice(
+  invoiceId: string,
+  lines: { campaignLineId: string | null; description: string; net: string }[],
+  clientPo: string,
+  // Until the move from Sage to Xero, the invoice is raised in Sage and its
+  // number keyed in here so the two can be matched. Blank means "let Xero
+  // assign one" once Xero owns the sequence.
+  invoiceNo = ""
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in." };
+
+  const { data: invoice } = await supabase
+    .from("client_invoices")
+    .select("id, status, xero_id")
+    .eq("id", invoiceId)
+    .maybeSingle();
+  if (!invoice) return { error: "Invoice not found." };
+  const head = invoice as { status: string; xero_id: string | null };
+  // Once it has gone to the client the figures are a matter of record.
+  if (head.status !== "Draft") {
+    return { error: "Only a draft invoice can be edited. Credit it instead." };
+  }
+  // And once Xero holds it, Xero is the record. Editing here would leave the
+  // two disagreeing with no way to tell which is right.
+  if (head.xero_id) {
+    return { error: "This invoice is in Xero now. Edit it there." };
+  }
+
+  const clean = lines
+    .map((l) => ({
+      campaign_line_id: l.campaignLineId,
+      description: l.description.trim(),
+      net: Number(String(l.net).replace(/[^0-9.-]/g, "")) || 0,
+    }))
+    .filter((l) => l.description || l.net);
+  if (!clean.length) return { error: "An invoice needs at least one line." };
+
+  const amount = clean.reduce((a, l) => a + l.net, 0);
+
+  await supabase.from("client_invoice_lines").delete().eq("invoice_id", invoiceId);
+  const { error } = await supabase.from("client_invoice_lines").insert(
+    clean.map((l, i) => ({ ...l, invoice_id: invoiceId, sort_order: i }))
+  );
+  if (error) return { error: error.message };
+
+  const { error: headError } = await supabase
+    .from("client_invoices")
+    .update({
+      amount_ex_vat: amount,
+      outstanding: amount,
+      client_po: clientPo.trim() || null,
+      invoice_no: invoiceNo.trim() || null,
+    })
+    .eq("id", invoiceId);
+  if (headError) return { error: headError.message };
+
+  revalidatePath(`/invoices/${invoiceId}`);
   revalidatePath("/finance");
   return {};
 }
@@ -510,7 +651,6 @@ export type ContactInput = {
   mobile: string;
   linkedin: string;
   notes: string;
-  status: string;
   ownerId: string;
   leadId?: string;
 };
@@ -524,27 +664,30 @@ export async function saveContact(input: ContactInput) {
 
   const ownerId = ownerFor(role, user.id, input.ownerId);
 
-  // A contact belongs to an organisation. Matching the typed company name to an
-  // existing organisation (or creating one) is what stops the free-text company
-  // problem coming back.
-  const { data: orgId } = await supabase.rpc("find_or_create_organisation", {
-    p_name: input.organisation.trim(),
-    p_sector: null,
-    p_owner: ownerId,
-  });
+  // A contact belongs to an organisation that already exists. Rick's rule:
+  // organisation first, then contact, as two clean steps — a contact form is
+  // the wrong place to be inventing companies.
+  const { data: org } = await supabase
+    .from("organisations")
+    .select("id, name")
+    .ilike("name", input.organisation.trim())
+    .maybeSingle();
+  if (!org) {
+    return { error: `"${input.organisation.trim()}" isn't an organisation yet. Create it first, then add the contact.` };
+  }
+  const { id: orgId, name: orgName } = org as { id: string; name: string };
 
   const row = {
     first_name: input.firstName.trim(),
     last_name: input.lastName.trim() || null,
     job_title: input.jobTitle.trim() || null,
-    organisation: input.organisation.trim(),
-    organisation_id: (orgId as string | null) ?? null,
+    organisation: orgName,
+    organisation_id: orgId,
     email: input.email.trim() || null,
     phone: input.phone.trim() || null,
     mobile: input.mobile.trim() || null,
     linkedin: input.linkedin.trim() || null,
     notes: input.notes.trim() || null,
-    status: input.status,
     owner_id: ownerId,
     lead_id: input.leadId || null,
   };
@@ -574,13 +717,13 @@ export async function deleteContact(id: string) {
 async function promoteWonLead(
   supabase: Awaited<ReturnType<typeof createClient>>,
   leadId: string
-) {
+): Promise<{ error?: string; campaignRef?: string }> {
   const { data: lead } = await supabase
     .from("leads")
     .select("id, name, value, owner_id, sector, organisation_id")
     .eq("id", leadId)
     .maybeSingle();
-  if (!lead) return;
+  if (!lead) return { error: "That opportunity could not be found." };
 
   // Winning the work makes the company an active client. Recorded as a tracked
   // status change with its reason, not a silent overwrite.
@@ -611,7 +754,7 @@ async function promoteWonLead(
 
   let clientId = existing?.id as string | undefined;
   if (!clientId) {
-    const { data: created } = await supabase
+    const { data: created, error: clientError } = await supabase
       .from("clients")
       .insert({
         name: lead.name,
@@ -621,21 +764,20 @@ async function promoteWonLead(
       })
       .select("id")
       .single();
+    if (clientError) {
+      return { error: `Couldn't create the client record: ${clientError.message}` };
+    }
     clientId = created?.id;
   }
-  if (!clientId) return;
+  if (!clientId) return { error: "Couldn't create the client record." };
 
-  // 2. An open campaign shell, ready for booking lines.
-  const { data: last } = await supabase
-    .from("campaigns")
-    .select("ref")
-    .order("ref", { ascending: false })
-    .limit(1);
-  const n = last?.[0]?.ref ? parseInt(String(last[0].ref).replace(/\D/g, ""), 10) : 2600;
-  const { data: campaign } = await supabase
+  // 2. An open campaign shell, ready for booking lines. Uses the same counter
+  //    as the booking form — this had its own copy of the broken text-sort
+  //    logic, so a won deal could collide with a booked campaign.
+  const { data: campaign, error: campaignError } = await supabase
     .from("campaigns")
     .insert({
-      ref: `AE-${(Number.isFinite(n) ? n : 2600) + 1}`,
+      ref: await nextRef(supabase),
       name: `${lead.name} — first campaign`,
       client_id: clientId,
       client_org_id: orgId,
@@ -645,6 +787,15 @@ async function promoteWonLead(
     })
     .select("id, ref")
     .single();
+
+  // This is where the promotion used to fail invisibly: a duplicate reference
+  // made the insert fail, the error was discarded, and Closed Won appeared to
+  // do nothing at all.
+  if (campaignError) {
+    return {
+      error: `The client was created, but the campaign was not: ${campaignError.message}`,
+    };
+  }
 
   // 3. The booking task that makes the step compulsory.
   await supabase.from("tasks").insert({
@@ -658,21 +809,20 @@ async function promoteWonLead(
     lead_id: lead.id,
   });
 
-  // 4. Contacts at that organisation become client contacts.
+  // 4. Contacts at that organisation become client contacts. Their status is
+  //    the organisation's — Active Client now — so only the link is set.
+  await supabase.from("contacts").update({ client_id: clientId }).eq("lead_id", lead.id);
   await supabase
     .from("contacts")
-    .update({ status: "Client", client_id: clientId })
-    .eq("lead_id", lead.id);
-  await supabase
-    .from("contacts")
-    .update({ status: "Client", client_id: clientId })
+    .update({ client_id: clientId })
     .ilike("organisation", lead.name)
     .is("client_id", null);
 
-  revalidatePath("/clients");
+  revalidatePath("/organisations");
   revalidatePath("/campaigns");
   revalidatePath("/tasks");
   revalidatePath("/contacts");
+  return { campaignRef: campaign?.ref as string | undefined };
 }
 
 // --- pipeline -----------------------------------------------------------
@@ -686,6 +836,10 @@ export type LeadInput = {
   stage: string;
   ownerId: string;
   nextAction: string;
+  /** Which channels are on the table — enough to tell one offer from another. */
+  channels: string[];
+  /** What's being proposed, in plain words. */
+  proposalNote: string;
 };
 
 export async function saveLead(input: LeadInput) {
@@ -714,6 +868,8 @@ export async function saveLead(input: LeadInput) {
     owner_id: ownerId,
     next_action: input.nextAction.trim() || null,
     organisation_id: (orgId as string | null) ?? null,
+    channels: input.channels.length ? input.channels : null,
+    proposal_note: input.proposalNote.trim() || null,
   };
 
   let becameWon = false;
@@ -726,7 +882,10 @@ export async function saveLead(input: LeadInput) {
     becameWon = before?.stage !== "Closed Won" && input.stage === "Closed Won";
     const { error } = await supabase.from("leads").update(row).eq("id", input.id);
     if (error) return { error: error.message };
-    if (becameWon) await promoteWonLead(supabase, input.id);
+    if (becameWon) {
+      const promo = await promoteWonLead(supabase, input.id);
+      if (promo.error) return { error: promo.error };
+    }
   } else {
     const { data: created, error } = await supabase
       .from("leads")
@@ -734,7 +893,10 @@ export async function saveLead(input: LeadInput) {
       .select("id")
       .single();
     if (error) return { error: error.message };
-    if (input.stage === "Closed Won" && created) await promoteWonLead(supabase, created.id);
+    if (input.stage === "Closed Won" && created) {
+      const promo = await promoteWonLead(supabase, created.id);
+      if (promo.error) return { error: promo.error };
+    }
   }
 
   revalidatePath("/pipeline");
@@ -752,7 +914,10 @@ export async function moveLeadStage(id: string, stage: string) {
   const { error } = await supabase.from("leads").update({ stage }).eq("id", id);
   if (error) return { error: error.message };
   if (before?.stage !== "Closed Won" && stage === "Closed Won") {
-    await promoteWonLead(supabase, id);
+    // Dragging a card to Closed Won is the most common way this runs, so a
+    // failure here must reach the user rather than disappearing.
+    const promo = await promoteWonLead(supabase, id);
+    if (promo.error) return { error: promo.error };
   }
   revalidatePath("/pipeline");
   revalidatePath("/");
@@ -842,4 +1007,254 @@ export async function updateCampaignStatus(id: string, status: string) {
   revalidatePath("/campaigns");
   revalidatePath("/");
   return {};
+}
+
+// --- space orders --------------------------------------------------------
+
+/**
+ * Save the "To:" contact and order notes on a booking line, so reprinting a
+ * Space Order gives the same document rather than a blank one.
+ */
+export async function saveSpaceOrderDetails(
+  orderId: string,
+  supplierContact: string,
+  orderNotes: string
+) {
+  const supabase = await createClient();
+  const { user, role } = await meWithRole(supabase);
+  if (!user) return { error: "You need to be signed in." };
+  if (role === "restricted") return { error: RESTRICTED_NO_BOOKING };
+
+  // These live on the order, not the line — one order can cover several lines.
+  const { error } = await supabase
+    .from("space_orders")
+    .update({
+      supplier_contact: supplierContact.trim() || null,
+      order_notes: orderNotes.trim() || null,
+    })
+    .eq("id", orderId);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/space-orders/${orderId}`);
+  revalidatePath("/finance");
+  return {};
+}
+
+// --- organisations -------------------------------------------------------
+
+export type OrganisationInput = {
+  id?: string;
+  name: string;
+  sector: string;
+  ownerId: string;
+  isSupplier: boolean;
+  customerStatus: string;
+  /** Reason for a status change — recorded in the organisation's history. */
+  statusReason: string;
+  companiesHouseNo: string;
+  website: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  postcode: string;
+  country: string;
+  phone: string;
+  notes: string;
+  archived: boolean;
+  /**
+   * Optional first contact, so a new company and the person you deal with can
+   * be added in one go. Entirely optional — leave the name blank and no contact
+   * is created, because you often log a company before you have a name.
+   */
+  contactFirstName?: string;
+  contactLastName?: string;
+  contactJobTitle?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+};
+
+/** Create or update an organisation, recording any status change with its reason. */
+export async function saveOrganisation(input: OrganisationInput) {
+  const supabase = await createClient();
+  const { user, role } = await meWithRole(supabase);
+  if (!user) return { error: "You need to be signed in." };
+
+  const name = input.name.trim();
+  if (!name) return { error: "Give the organisation a name." };
+
+  const row = {
+    name,
+    sector: input.sector.trim() || null,
+    owner_id: ownerFor(role, user.id, input.ownerId),
+    is_supplier: input.isSupplier,
+    companies_house_no: input.companiesHouseNo.trim() || null,
+    website: input.website.trim() || null,
+    address_line1: input.addressLine1.trim() || null,
+    address_line2: input.addressLine2.trim() || null,
+    city: input.city.trim() || null,
+    postcode: input.postcode.trim() || null,
+    country: input.country.trim() || null,
+    phone: input.phone.trim() || null,
+    notes: input.notes.trim() || null,
+    archived: input.archived,
+  };
+
+  let id = input.id;
+
+  if (id) {
+    const { error } = await supabase.from("organisations").update(row).eq("id", id);
+    if (error) return { error: error.message };
+  } else {
+    const { data, error } = await supabase
+      .from("organisations")
+      .insert({ ...row, customer_status: input.customerStatus })
+      .select("id")
+      .single();
+    if (error) {
+      return {
+        error: /duplicate|unique/i.test(error.message)
+          ? `An organisation called "${name}" already exists.`
+          : error.message,
+      };
+    }
+    id = data.id as string;
+  }
+
+  // Status goes through the dedicated function so the change is recorded with
+  // its reason, rather than silently overwriting the previous value.
+  if (input.id) {
+    const { error } = await supabase.rpc("set_organisation_status", {
+      p_org: id,
+      p_status: input.customerStatus,
+      p_reason: input.statusReason.trim() || null,
+    });
+    if (error) return { error: error.message };
+  }
+
+  // Optional first contact. Only created when a first name is given, and only
+  // for a brand-new organisation — editing an existing one uses "Add contact".
+  const contactName = (input.contactFirstName ?? "").trim();
+  if (!input.id && contactName && id) {
+    const { error: contactError } = await supabase.from("contacts").insert({
+      first_name: contactName,
+      last_name: (input.contactLastName ?? "").trim() || null,
+      job_title: (input.contactJobTitle ?? "").trim() || null,
+      organisation: name,
+      organisation_id: id,
+      email: (input.contactEmail ?? "").trim() || null,
+      phone: (input.contactPhone ?? "").trim() || null,
+      owner_id: ownerFor(role, user.id, input.ownerId),
+    });
+    // The organisation saved fine — say the contact didn't rather than
+    // pretending the whole thing failed.
+    if (contactError) {
+      revalidatePath("/organisations");
+      return {
+        id,
+        error: `${name} was created, but the contact was not: ${contactError.message}`,
+      };
+    }
+    revalidatePath("/contacts");
+  }
+
+  revalidatePath("/organisations");
+  revalidatePath(`/organisations/${id}`);
+  return { id };
+}
+
+/**
+ * Make sure every supplier on a campaign has exactly one Space Order, and that
+ * their lines point at it.
+ *
+ * Migration 0010 grouped the campaigns that existed at the time, but nothing
+ * created orders for campaigns booked afterwards — so newly booked work had no
+ * Space Order to generate. Called after booking and after editing, and safe to
+ * run repeatedly: it only fills in what is missing.
+ *
+ * Rick's rule: one order per supplier, never several. ITV1 and ITVQuiz are
+ * separate lines at different rates but go on one order to ITV.
+ */
+async function syncSpaceOrders(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  campaignId: string
+) {
+  const { data: lineRows } = await supabase
+    .from("campaign_lines")
+    .select("id, vendor, supplier_po, space_order_id")
+    .eq("campaign_id", campaignId);
+
+  const lines = (lineRows ?? []) as {
+    id: string;
+    vendor: string | null;
+    supplier_po: string | null;
+    space_order_id: string | null;
+  }[];
+
+  // Group by supplier, case- and whitespace-insensitively, to match the unique
+  // index on space_orders.
+  const groups = new Map<string, { vendor: string; po: string | null; lineIds: string[] }>();
+  for (const l of lines) {
+    const vendor = (l.vendor ?? "").trim();
+    if (!vendor) continue;
+    const key = vendor.toLowerCase();
+    const g = groups.get(key) ?? { vendor, po: null, lineIds: [] };
+    g.lineIds.push(l.id);
+    // The order carries the earliest number its lines hold, as the backfill did.
+    if (l.supplier_po && (!g.po || l.supplier_po < g.po)) g.po = l.supplier_po;
+    groups.set(key, g);
+  }
+
+  const { data: existing } = await supabase
+    .from("space_orders")
+    .select("id, supplier_name")
+    .eq("campaign_id", campaignId);
+
+  const bySupplier = new Map(
+    ((existing ?? []) as { id: string; supplier_name: string }[]).map((o) => [
+      o.supplier_name.trim().toLowerCase(),
+      o.id,
+    ])
+  );
+
+  for (const [key, g] of groups) {
+    let orderId = bySupplier.get(key);
+
+    // Suppliers become organisations too, so they gain contacts and an address
+    // rather than staying as loose text on a booking line.
+    const { data: supplierOrgId } = await supabase.rpc("find_or_create_organisation", {
+      p_name: g.vendor,
+      p_sector: null,
+      p_owner: null,
+    });
+    if (supplierOrgId) {
+      await supabase
+        .from("organisations")
+        .update({ is_supplier: true })
+        .eq("id", supplierOrgId as string);
+    }
+
+    if (!orderId) {
+      const { data: created } = await supabase
+        .from("space_orders")
+        .insert({
+          campaign_id: campaignId,
+          supplier_org_id: (supplierOrgId as string | null) ?? null,
+          supplier_name: g.vendor,
+          order_number: g.po,
+        })
+        .select("id")
+        .single();
+      orderId = created?.id as string | undefined;
+    }
+
+    if (orderId) {
+      await supabase
+        .from("campaign_lines")
+        .update({
+          space_order_id: orderId,
+          supplier_org_id: (supplierOrgId as string | null) ?? null,
+        })
+        .in("id", g.lineIds);
+    }
+  }
 }

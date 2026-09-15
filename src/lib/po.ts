@@ -10,6 +10,8 @@ export const SOLD_STATUSES = ["booked", "live", "risk", "done"];
 export type PurchaseOrder = {
   po: string;
   lineId: string;
+  /** The Space Order this line belongs to (one per supplier per campaign). */
+  spaceOrderId: string | null;
   campaignId: string;
   campaignRef: string;
   campaignName: string;
@@ -61,6 +63,7 @@ export function buildPurchaseOrders(campaigns: Campaign[]): PurchaseOrder[] {
       // campaigns booked before numbering existed.
       po: l.supplier_po ?? code + String(n).padStart(4, "0"),
       lineId: l.id,
+      spaceOrderId: l.space_order_id ?? null,
       campaignId: c.id,
       campaignRef: c.ref,
       campaignName: c.name,
@@ -119,4 +122,112 @@ export function reconcile(po: PurchaseOrder, invoices: Map<string, SupplierInvoi
     return { state: "matched", invoice, diff };
   }
   return { state: "variance", invoice, diff };
+}
+
+// --- Space Order document ------------------------------------------------
+// The sheet sent to a media owner confirming a booking. Note what is NOT here:
+// the client charge. The supplier sees the rate card and what we pay them —
+// never what the client is charged.
+
+/** ADEX's own details, as they appear on the order. Taken from the real
+ *  RAN0102 order so the document matches what suppliers already recognise. */
+export const ADEX = {
+  name: "Advertising Excellence Ltd",
+  address: "G4 Ash House Business Centre, Ash Road, New Ash Green, DA3 8JD",
+  phone: "01474 365 155",
+  web: "www.advertisingexcellence.co.uk",
+  invoicesTo: ["Lynsey.tester@advertisingexcellence.co.uk", "Accounts@advertisingexcellence.co.uk"],
+};
+
+export type SpaceOrderRow = {
+  /** The publication or site — FTWM, M4 Tower — not the media owner. */
+  media: string;
+  date: string;
+  detail: string;
+  /** Blank on production rows, which carry no commission. */
+  gross: number | null;
+  net: number;
+  total: number;
+};
+
+export type SpaceOrder = {
+  lineId: string;
+  po: string;
+  supplier: string;
+  supplierOrgId: string | null;
+  supplierContact: string;
+  fromName: string;
+  fromEmail: string;
+  date: string;
+  client: string;
+  summary: string;
+  commissionPct: number;
+  copy: string;
+  orderNotes: string;
+  rows: SpaceOrderRow[];
+  gross: number;
+  net: number;
+  vat: number;
+  total: number;
+  /** Contacts already saved against this supplier, for the "To:" dropdown. */
+  contacts: { id: string; name: string }[];
+};
+
+/** 07.09.26 — the format the real Space Orders use. */
+export function poDate(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`;
+}
+
+/**
+ * Split a line into one row per insertion.
+ *
+ * Both real orders itemise. RAN0102 lists nine Saturdays at the same rate;
+ * RAN0094 lists six bursts as date ranges at differing rates. The difference is
+ * how they were booked: several dates on ONE line share that line's cost
+ * equally (Connor's rule), whereas separately-priced bursts are separate
+ * booking lines and keep their own costs.
+ *
+ * `selected_dates` is free text, so we split on commas.
+ */
+export function spaceOrderRows(
+  media: string,
+  detail: string,
+  selectedDates: string | null,
+  startDate: string,
+  endDate: string,
+  gross: number,
+  commissionPct: number,
+  isProduction = false
+): SpaceOrderRow[] {
+  const dates = (selectedDates ?? "")
+    .split(/[,;\n]+/)
+    .map((d) => d.trim())
+    .filter(Boolean);
+
+  const list = dates.length
+    ? dates
+    : [
+        startDate === endDate
+          ? poDate(startDate)
+          : `${poDate(startDate)} - ${poDate(endDate)}`,
+      ];
+
+  const perGross = gross / list.length;
+  const perNet = perGross * (1 - commissionPct / 100);
+
+  return list.map((date) => ({
+    media,
+    date,
+    detail,
+    // Production carries no commission, so gross and net are the same figure.
+    // The real orders leave the gross column blank on those rows rather than
+    // printing the same number twice.
+    gross: isProduction ? null : perGross,
+    net: perNet,
+    total: perNet * (1 + VAT_RATE),
+  }));
 }

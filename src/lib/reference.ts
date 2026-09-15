@@ -1,6 +1,14 @@
 // Reference lists for the booking form — Connor's supplier rosters, per channel.
 
-export const SUPPLIERS_BY_CHANNEL: Record<string, string[]> = {
+// Listed here in whatever order they were gathered; presented alphabetically,
+// so a long dropdown can be scanned (Rick). Sorting once at export keeps the
+// default — the first entry — consistent with what the dropdown shows.
+const alphabetical = (lists: Record<string, string[]>) =>
+  Object.fromEntries(
+    Object.entries(lists).map(([k, v]) => [k, [...v].sort((a, b) => a.localeCompare(b))])
+  );
+
+export const SUPPLIERS_BY_CHANNEL: Record<string, string[]> = alphabetical({
   Digital: [
     "Plug Media", "Sabio", "Readpeak", "MMM", "News UK", "Reach", "Google", "Meta",
     "Amazon", "LinkedIn", "ITV", "Ozone", "LG", "Samsung", "GPM360",
@@ -19,7 +27,7 @@ export const SUPPLIERS_BY_CHANNEL: Record<string, string[]> = {
   // media owners. Printing a poster is a production cost on the OOH line
   // itself, not a creative job.
   Creative: ["Studio", "Treacle7"],
-};
+});
 
 /**
  * Media buys the space; production is the physical cost of making the thing

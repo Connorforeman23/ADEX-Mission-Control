@@ -89,10 +89,10 @@ insert into creative_items (client_id, item, format, spec, due_date, stage, desi
   ((select id from clients where name='Acme Test Client'),  'Test 6-sheet',      'OOH',   '1200x1800', current_date - 1, 'Amends',         'inhouse');  -- overdue
 
 -- --- contacts --------------------------------------------------------------
-insert into contacts (first_name, last_name, job_title, organisation, email, phone, status) values
-  ('Jane',  'Test',    'Marketing Director', 'Prospect One Ltd', 'jane@example.com',  '01000 000001', 'Engaged'),
-  ('John',  'Sample',  'CEO',                'Prospect Two Ltd', 'john@example.com',  '01000 000002', 'Prospect'),
-  ('Priya', 'Example', 'Head of Brand',      'Prospect One Ltd', 'priya@example.com', '01000 000003', 'Prospect');
+insert into contacts (first_name, last_name, job_title, organisation, email, phone) values
+  ('Jane',  'Test',    'Marketing Director', 'Prospect One Ltd', 'jane@example.com',  '01000 000001'),
+  ('John',  'Sample',  'CEO',                'Prospect Two Ltd', 'john@example.com',  '01000 000002'),
+  ('Priya', 'Example', 'Head of Brand',      'Prospect One Ltd', 'priya@example.com', '01000 000003');
 
 -- --- tasks -----------------------------------------------------------------
 insert into tasks (title, notes, due_date, kind) values

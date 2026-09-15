@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
 import { deleteContact, saveContact, type ContactInput } from "@/lib/actions";
+import { CUSTOMER_STATUS_CLASS, CUSTOMER_STATUS_LABEL } from "@/lib/organisations";
 
 export type ContactRow = {
   id: string;
@@ -13,24 +14,17 @@ export type ContactRow = {
   job_title: string | null;
   organisation: string;
   organisationId: string | null;
+  /** The company's customer status — the only status a contact has. */
+  organisationStatus: string | null;
   email: string | null;
   phone: string | null;
   mobile: string | null;
   linkedin: string | null;
   notes: string | null;
-  status: string;
   owner: string;
   ownerId: string;
   leadId: string | null;
   isClient: boolean;
-};
-
-const STATUSES = ["Prospect", "Engaged", "Client", "Lapsed"];
-const STATUS_CLASS: Record<string, string> = {
-  Prospect: "planning",
-  Engaged: "booked",
-  Client: "live",
-  Lapsed: "done",
 };
 
 const blank = (ownerId: string): ContactInput => ({
@@ -43,7 +37,6 @@ const blank = (ownerId: string): ContactInput => ({
   mobile: "",
   linkedin: "",
   notes: "",
-  status: "Prospect",
   ownerId,
 });
 
@@ -53,26 +46,30 @@ export default function ContactsPanel({
   organisations,
   meId,
   openNew,
+  prefillOrg = "",
 }: {
   contacts: ContactRow[];
   staff: { id: string; full_name: string }[];
-  /** Known companies, offered as autocomplete so names don't drift. */
+  /** Existing companies. A contact can only be added to one of these —
+   *  organisation first, then contact, as two clean steps. */
   organisations: { id: string; name: string }[];
   meId: string;
   openNew?: boolean;
+  /** Company carried through from an organisation page. */
+  prefillOrg?: string;
 }) {
   const router = useRouter();
   const [owner, setOwner] = useState("All");
-  const [status, setStatus] = useState("All");
   const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<ContactInput | null>(openNew ? blank(meId) : null);
+  const [editing, setEditing] = useState<ContactInput | null>(
+    openNew ? { ...blank(meId), organisation: prefillOrg } : null
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const rows = contacts.filter(
     (c) =>
       (owner === "All" || c.owner === owner) &&
-      (status === "All" || c.status === status) &&
       (!search ||
         `${c.first_name} ${c.last_name ?? ""} ${c.organisation} ${c.email ?? ""}`
           .toLowerCase()
@@ -110,7 +107,6 @@ export default function ContactsPanel({
       mobile: c.mobile ?? "",
       linkedin: c.linkedin ?? "",
       notes: c.notes ?? "",
-      status: c.status,
       ownerId: c.ownerId,
       leadId: c.leadId ?? undefined,
     });
@@ -139,15 +135,6 @@ export default function ContactsPanel({
             ))}
           </select>
         </label>
-        <label className="field">
-          <span>Status</span>
-          <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="All">All statuses</option>
-            {STATUSES.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </label>
         <button
           className="btn btn-primary"
           style={{ marginLeft: "auto" }}
@@ -171,80 +158,85 @@ export default function ContactsPanel({
           </div>
         </section>
       ) : (
-        [...orgs.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([org, people]) => (
-          <section className="card" key={org} style={{ marginBottom: 14 }}>
-            <div className="card-head">
-              <h2>
-                {people[0]?.organisationId ? (
-                  <Link href={`/organisations/${people[0].organisationId}`} style={{ color: "inherit" }}>
-                    {org}
-                  </Link>
-                ) : (
-                  org
-                )}
-              </h2>
-              <span className="sub">
-                {people.length} contact{people.length === 1 ? "" : "s"}
-                {people.some((p) => p.isClient) ? " · client" : ""}
-              </span>
-            </div>
-            <div className="card-body" style={{ padding: 0 }}>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Role</th>
-                      <th>Email</th>
-                      <th>Phone</th>
-                      <th>Status</th>
-                      <th>Owner</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {people.map((c) => (
-                      <tr key={c.id}>
-                        <td>
-                          <div className="strong">
-                            {c.first_name} {c.last_name ?? ""}
-                          </div>
-                          {c.linkedin && (
-                            <a
-                              className="sub-line"
-                              href={c.linkedin.startsWith("http") ? c.linkedin : `https://${c.linkedin}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: "var(--blue)" }}
-                            >
-                              LinkedIn ↗
-                            </a>
-                          )}
-                        </td>
-                        <td className="sub-line">{c.job_title ?? "—"}</td>
-                        <td className="sub-line">
-                          {c.email ? <a href={`mailto:${c.email}`} style={{ color: "var(--blue)" }}>{c.email}</a> : "—"}
-                        </td>
-                        <td className="num sub-line">{c.mobile || c.phone || "—"}</td>
-                        <td>
-                          <span className={`st ${STATUS_CLASS[c.status] ?? "done"}`}>{c.status}</span>
-                        </td>
-                        <td className="sub-line">{c.owner}</td>
-                        <td>
-                          <button className="row-edit" aria-label={`Edit ${c.first_name}`} onClick={() => openEdit(c)}>
-                            <svg viewBox="0 0 24 24">
-                              <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        [...orgs.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([org, people]) => {
+          const status = people[0]?.organisationStatus;
+          return (
+            <section className="card" key={org} style={{ marginBottom: 14 }}>
+              <div className="card-head">
+                <h2>
+                  {people[0]?.organisationId ? (
+                    <Link href={`/organisations/${people[0].organisationId}`} style={{ color: "inherit" }}>
+                      {org}
+                    </Link>
+                  ) : (
+                    org
+                  )}
+                </h2>
+                <span className="sub" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                  {people.length} contact{people.length === 1 ? "" : "s"}
+                  {status && status !== "none" && (
+                    <span className={`st ${CUSTOMER_STATUS_CLASS[status] ?? "done"}`}>
+                      {CUSTOMER_STATUS_LABEL[status] ?? status}
+                    </span>
+                  )}
+                </span>
               </div>
-            </div>
-          </section>
-        ))
+              <div className="card-body" style={{ padding: 0 }}>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Owner</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {people.map((c) => (
+                        <tr key={c.id}>
+                          <td>
+                            {/* The name opens the contact, the way an organisation's
+                                name opens the organisation. */}
+                            <button type="button" className="link-btn strong" onClick={() => openEdit(c)}>
+                              {c.first_name} {c.last_name ?? ""}
+                            </button>
+                            {c.linkedin && (
+                              <a
+                                className="sub-line"
+                                href={c.linkedin.startsWith("http") ? c.linkedin : `https://${c.linkedin}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ color: "var(--blue)", display: "block" }}
+                              >
+                                LinkedIn ↗
+                              </a>
+                            )}
+                          </td>
+                          <td className="sub-line">{c.job_title ?? "—"}</td>
+                          <td className="sub-line">
+                            {c.email ? <a href={`mailto:${c.email}`} style={{ color: "var(--blue)" }}>{c.email}</a> : "—"}
+                          </td>
+                          <td className="num sub-line">{c.mobile || c.phone || "—"}</td>
+                          <td className="sub-line">{c.owner}</td>
+                          <td>
+                            <button className="row-edit" aria-label={`Edit ${c.first_name}`} onClick={() => openEdit(c)}>
+                              <svg viewBox="0 0 24 24">
+                                <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          );
+        })
       )}
 
       <Drawer
@@ -270,18 +262,25 @@ export default function ContactsPanel({
               </label>
               <label className="field">
                 <span>Organisation</span>
-                <input
+                <select
                   className="input"
-                  list="known-organisations"
                   value={editing.organisation}
                   onChange={(e) => setEditing({ ...editing, organisation: e.target.value })}
-                  placeholder="Start typing — pick an existing company or add a new one"
-                />
-                <datalist id="known-organisations">
+                >
+                  <option value="">Choose an organisation…</option>
                   {organisations.map((o) => (
-                    <option key={o.id} value={o.name} />
+                    <option key={o.id} value={o.name}>
+                      {o.name}
+                    </option>
                   ))}
-                </datalist>
+                </select>
+                <small className="sub-line" style={{ marginTop: 4 }}>
+                  Not listed?{" "}
+                  <Link href="/organisations?new=1" style={{ color: "var(--blue)" }}>
+                    Create the organisation first
+                  </Link>
+                  , then add the contact.
+                </small>
               </label>
               <label className="field">
                 <span>Email</span>
@@ -298,14 +297,6 @@ export default function ContactsPanel({
               <label className="field">
                 <span>LinkedIn</span>
                 <input className="input" value={editing.linkedin} onChange={(e) => setEditing({ ...editing, linkedin: e.target.value })} placeholder="Profile URL" />
-              </label>
-              <label className="field">
-                <span>Status</span>
-                <select className="input" value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value })}>
-                  {STATUSES.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
               </label>
               <label className="field">
                 <span>Owner</span>

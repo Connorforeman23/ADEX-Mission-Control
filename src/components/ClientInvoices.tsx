@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { dateGB, gbp } from "@/lib/money";
-import { generateClientInvoice, setInvoiceStatus } from "@/lib/actions";
+import { setInvoiceStatus } from "@/lib/actions";
 
 export type InvoiceRow = {
   id: string;
@@ -40,15 +41,6 @@ export default function ClientInvoices({
 
   const uninvoiced = campaigns.filter((c) => !c.invoiced && c.amount > 0);
 
-  async function generate(campaignId: string) {
-    setBusy(campaignId);
-    setError(null);
-    const res = await generateClientInvoice(campaignId);
-    setBusy(null);
-    if (res.error) return setError(res.error);
-    router.refresh();
-  }
-
   async function advance(inv: InvoiceRow) {
     const next = inv.status === "Draft" ? "Sent" : "Paid";
     setBusy(inv.id);
@@ -67,8 +59,8 @@ export default function ClientInvoices({
             className="btn"
             onClick={() =>
               setError(
-                "Xero isn't connected yet. Once it is, this pushes every invoice below to Xero " +
-                  "with its number and campaign bookings cross-referenced automatically."
+                "Invoices go to Xero one at a time, from the invoice itself — open a draft and " +
+                  "press Push to Xero. Xero assigns the number."
               )
             }
           >
@@ -97,13 +89,9 @@ export default function ClientInvoices({
                   </div>
                   <span className="num strong">{gbp(c.amount)}</span>
                   <span className="num sub-line">+{gbp(Math.round(c.amount * 0.2))} VAT</span>
-                  <button
-                    className="btn btn-primary"
-                    disabled={busy === c.id}
-                    onClick={() => generate(c.id)}
-                  >
-                    {busy === c.id ? "Generating…" : "Generate invoice"}
-                  </button>
+                  <Link className="btn btn-primary" href={`/invoices/preview/${c.id}`}>
+                    Preview invoice
+                  </Link>
                 </div>
               ))}
             </div>
@@ -112,8 +100,8 @@ export default function ClientInvoices({
 
         {invoices.length === 0 ? (
           <p className="empty-note">
-            No invoices raised yet. Generate one from a campaign above — the number follows the INV
-            sequence and links back to the campaign&rsquo;s bookings.
+            No invoices raised yet. Generate one from a campaign above — it opens as a draft you
+            can read and edit before anything goes to Xero.
           </p>
         ) : (
           <div className="table-wrap">
@@ -134,7 +122,11 @@ export default function ClientInvoices({
               <tbody>
                 {invoices.map((inv) => (
                   <tr key={inv.id}>
-                    <td className="num ref">{inv.invoice_no ?? "—"}</td>
+                    <td className="num ref">
+                      <Link href={`/invoices/${inv.id}`} style={{ color: "var(--blue)" }}>
+                        {inv.invoice_no ?? "Draft"}
+                      </Link>
+                    </td>
                     <td>
                       <div className="strong">{inv.campaignName}</div>
                       <div className="sub-line">
@@ -159,7 +151,10 @@ export default function ClientInvoices({
                         {inv.status}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      <Link className="btn" href={`/invoices/${inv.id}`}>
+                        {inv.status === "Draft" ? "Preview / edit" : "View"}
+                      </Link>
                       {inv.status !== "Paid" && (
                         <button className="btn" disabled={busy === inv.id} onClick={() => advance(inv)}>
                           Mark {inv.status === "Draft" ? "sent" : "paid"}

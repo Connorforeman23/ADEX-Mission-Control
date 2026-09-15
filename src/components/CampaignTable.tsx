@@ -43,6 +43,7 @@ export default function CampaignTable({
   openNew,
   openId,
   canBook = true,
+  prefillClient = "",
 }: {
   campaigns: Campaign[];
   clients: { id: string; name: string }[];
@@ -52,6 +53,8 @@ export default function CampaignTable({
   openId?: string;
   /** Restricted users can't book — hides the New campaign entry points. */
   canBook?: boolean;
+  /** Client carried through from an organisation page. */
+  prefillClient?: string;
 }) {
   const [staff, setStaff] = useState("All");
   const [client, setClient] = useState("All");
@@ -111,6 +114,7 @@ export default function CampaignTable({
         line_type: l.line_type ?? "media",
         channel: l.channel,
         vendor: l.vendor,
+        publication: l.publication ?? "",
         detail: l.detail ?? "",
         start_date: l.start_date,
         end_date: l.end_date,
@@ -450,6 +454,7 @@ export default function CampaignTable({
         onClose={() => setEditor({ open: false })}
       >
         <BookingForm
+          prefillClient={prefillClient}
           clients={clients}
           staff={staffList}
           editing={editor.editing}

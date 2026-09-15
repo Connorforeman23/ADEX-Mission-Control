@@ -17,6 +17,7 @@ const blankLine = (): LineInput => ({
   line_type: "media",
   channel: "Digital",
   vendor: SUPPLIERS_BY_CHANNEL.Digital[0],
+  publication: "",
   detail: "",
   start_date: "",
   end_date: "",
@@ -58,15 +59,18 @@ export default function BookingForm({
   staff,
   editing,
   onDone,
+  prefillClient = "",
 }: {
   clients: { id: string; name: string }[];
   staff: { id: string; full_name: string }[];
   editing?: EditingCampaign;
   onDone?: () => void;
+  /** Client carried through from an organisation page. */
+  prefillClient?: string;
 }) {
   const router = useRouter();
   const [name, setName] = useState(editing?.name ?? "");
-  const [clientName, setClientName] = useState(editing?.clientName ?? "");
+  const [clientName, setClientName] = useState(editing?.clientName ?? prefillClient);
   const [newClient, setNewClient] = useState("");
   const [ownerId, setOwnerId] = useState(editing?.ownerId || staff[0]?.id || "");
   const [status, setStatus] = useState(editing?.status ?? "planning");
@@ -252,6 +256,15 @@ export default function BookingForm({
                       <option key={v}>{v}</option>
                     ))}
                   </select>
+                </label>
+                <label className="field">
+                  <span>Publication / site</span>
+                  <input
+                    className="input"
+                    value={l.publication}
+                    onChange={(e) => updateLine(i, { publication: e.target.value })}
+                    placeholder="e.g. FTWM, M4 Tower"
+                  />
                 </label>
                 <label className="field wide">
                   <span>Detail</span>

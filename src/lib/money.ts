@@ -17,6 +17,8 @@ export type CampaignLine = {
   id: string;
   channel: string;
   vendor: string;
+  /** The publication or site booked — FTWM, M4 Tower — not the media owner. */
+  publication?: string | null;
   detail: string | null;
   start_date: string;
   end_date: string;
@@ -33,6 +35,8 @@ export type CampaignLine = {
   copy_instruction?: string;
   urn?: string | null;
   supplier_po?: string | null;
+  /** Which Space Order this line sits on — one order per supplier per campaign. */
+  space_order_id?: string | null;
 };
 
 export type Campaign = {
