@@ -214,3 +214,15 @@ export async function fetchXeroContacts(): Promise<XeroContact[]> {
   const data = await xeroApi<{ Contacts?: XeroContact[] }>("/Contacts?order=Name");
   return data.Contacts ?? [];
 }
+
+/**
+ * Which Xero account and VAT rate invoice lines post to.
+ *
+ * "200" and "OUTPUT2" are Xero's UK defaults — Sales, and 20% VAT on income —
+ * and they are what the Demo Company uses. ADEX's real Xero will be set up
+ * from a Sage export, where Sales is 4000, so the codes there may differ.
+ * Set XERO_SALES_ACCOUNT and XERO_VAT_TAX_TYPE in Vercel to match; nothing
+ * needs rebuilding beyond that.
+ */
+export const XERO_SALES_ACCOUNT = (process.env.XERO_SALES_ACCOUNT ?? "").trim() || "200";
+export const XERO_VAT_TAX_TYPE = (process.env.XERO_VAT_TAX_TYPE ?? "").trim() || "OUTPUT2";

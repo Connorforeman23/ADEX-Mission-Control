@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getClientInvoice } from "@/lib/queries";
-import { fetchXeroContacts, xeroApi, xeroConfigured } from "@/lib/xero";
+import {
+  fetchXeroContacts,
+  xeroApi,
+  xeroConfigured,
+  XERO_SALES_ACCOUNT,
+  XERO_VAT_TAX_TYPE,
+} from "@/lib/xero";
 import type {
   LoadContactsResult,
   PushInvoiceResult,
@@ -124,7 +130,7 @@ export async function pushTestDraftInvoice(
                   Description: "ADEX Mission Control — connection test (safe to delete)",
                   Quantity: 1,
                   UnitAmount: 1.0,
-                  AccountCode: "200",
+                  AccountCode: XERO_SALES_ACCOUNT,
                 },
               ],
             },
@@ -211,8 +217,8 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<XeroInvoiceR
                 Description: l.description,
                 Quantity: 1,
                 UnitAmount: l.net,
-                AccountCode: "200", // Sales
-                TaxType: "OUTPUT2", // UK standard rate, 20%
+                AccountCode: XERO_SALES_ACCOUNT,
+                TaxType: XERO_VAT_TAX_TYPE,
               })),
             },
           ],
