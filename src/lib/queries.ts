@@ -32,7 +32,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
        profiles ( full_name ),
        campaign_lines ( id, channel, vendor, publication, detail, line_type, start_date, end_date, selected_dates,
                         cpt, ooh_format, ooh_disp_type, copy_instruction, urn, supplier_po,
-                        supplier_gross, supplier_net, client_charge, space_order_id )`
+                        supplier_gross, supplier_net, client_charge, commission_pct, space_order_id )`
     )
     .order("start_date", { ascending: false, nullsFirst: false });
 

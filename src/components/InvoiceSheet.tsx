@@ -218,6 +218,12 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
                 <th>Payment Due On or Before</th>
                 <td>{invoice.dueDate ? dateGB(invoice.dueDate) : "—"}</td>
               </tr>
+              {clientPo.trim() && (
+                <tr>
+                  <th>Your PO Number</th>
+                  <td className="inv-no">{clientPo.trim()}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -240,17 +246,6 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
             </tr>
           </thead>
           <tbody>
-            {/* The client's own PO leads the schedule as a zero-value line,
-                exactly as it does on the Randox invoices. */}
-            {clientPo.trim() && (
-              <tr>
-                <td>PO Number {clientPo.trim()}</td>
-                <td className="r">0.00</td>
-                <td className="r">0.00</td>
-                <td className="r">0.00</td>
-                {draft && <td className="inv-x" />}
-              </tr>
-            )}
             {lines.map((l, i) => {
               const net = Number(l.net.replace(/[^0-9.-]/g, "")) || 0;
               const vat = Math.round(net * 20) / 100;
@@ -320,7 +315,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
         </table>
 
         <div className="inv-terms">
-          <p>All queries must be raised immediately.</p>
+          <p>All queries must be raised immediately with {ADEX.accountsEmail}.</p>
           <p>{PAYMENT_TERMS}</p>
         </div>
 

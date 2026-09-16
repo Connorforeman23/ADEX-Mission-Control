@@ -137,6 +137,8 @@ export const ADEX = {
   phone: "01474 365 155",
   web: "www.advertisingexcellence.co.uk",
   invoicesTo: ["Lynsey.tester@advertisingexcellence.co.uk", "Accounts@advertisingexcellence.co.uk"],
+  /** Where clients send invoice queries — printed on every invoice. */
+  accountsEmail: "Accounts@advertisingexcellence.co.uk",
 };
 
 export type SpaceOrderRow = {
@@ -203,10 +205,14 @@ export function spaceOrderRows(
   commissionPct: number,
   isProduction = false
 ): SpaceOrderRow[] {
+  // Selected dates are stored as ISO since 5.1; older lines may still hold
+  // whatever was typed. Print ISO in the order's own form, pass anything else
+  // through untouched.
   const dates = (selectedDates ?? "")
     .split(/[,;\n]+/)
     .map((d) => d.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? poDate(d) : d));
 
   const list = dates.length
     ? dates

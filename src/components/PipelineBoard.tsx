@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
 import FollowUp from "@/components/FollowUp";
@@ -58,11 +59,17 @@ const blank = (ownerId: string): LeadInput => ({
 export default function PipelineBoard({
   leads,
   staff,
+  organisations,
+  meId,
   openNew,
   prefillOrg = "",
 }: {
   leads: LeadRow[];
   staff: { id: string; full_name: string }[];
+  /** Existing companies — the opportunity form picks from these. */
+  organisations: { id: string; name: string }[];
+  /** Signed-in user: a new opportunity is theirs unless they say otherwise. */
+  meId: string;
   openNew?: boolean;
   /** Company carried through from an organisation page. */
   prefillOrg?: string;
@@ -70,8 +77,10 @@ export default function PipelineBoard({
   const router = useRouter();
   const [owner, setOwner] = useState("All");
   const [view, setView] = useState<"board" | "list" | "forecast">("board");
+  // Default owner: whoever is creating it, if they are on the sales team.
+  const defaultOwner = staff.some((s) => s.id === meId) ? meId : staff[0]?.id ?? "";
   const [editing, setEditing] = useState<LeadInput | null>(
-    openNew ? { ...blank(staff[0]?.id ?? ""), name: prefillOrg } : null
+    openNew ? { ...blank(defaultOwner), name: prefillOrg } : null
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,7 +161,7 @@ export default function PipelineBoard({
             className="btn btn-primary"
             onClick={() => {
               setError(null);
-              setEditing(blank(staff[0]?.id ?? ""));
+              setEditing(blank(defaultOwner));
             }}
           >
             Add opportunity
@@ -356,11 +365,30 @@ export default function PipelineBoard({
             <div className="form-grid">
               <label className="field wide">
                 <span>Company</span>
-                <input
+                <select
                   className="input"
                   value={editing.name}
                   onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                />
+                >
+                  <option value="">Choose an organisation…</option>
+                  {/* An existing opportunity may name a company that has since
+                      been archived — keep it selectable rather than blanking it. */}
+                  {editing.name && !organisations.some((o) => o.name === editing.name) && (
+                    <option value={editing.name}>{editing.name}</option>
+                  )}
+                  {organisations.map((o) => (
+                    <option key={o.id} value={o.name}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                <small className="sub-line" style={{ marginTop: 4 }}>
+                  Not listed?{" "}
+                  <Link href="/organisations?new=1" style={{ color: "var(--blue)" }}>
+                    Create the organisation first
+                  </Link>
+                  .
+                </small>
               </label>
               <label className="field">
                 <span>Contact</span>

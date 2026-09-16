@@ -19,6 +19,8 @@ export default function TasksPanel({
   tasks,
   staff,
   clients,
+  campaigns,
+  leads,
   meId,
   today,
   openNew,
@@ -26,6 +28,8 @@ export default function TasksPanel({
   tasks: TaskRow[];
   staff: { id: string; full_name: string }[];
   clients: { id: string; name: string; owner_id: string | null }[];
+  campaigns: { id: string; ref: string; name: string }[];
+  leads: { id: string; name: string; stage: string }[];
   /** Signed-in user — new tasks default to them. */
   meId: string;
   today: string;
@@ -234,6 +238,36 @@ export default function TasksPanel({
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Campaign (optional)</span>
+                <select
+                  className="input"
+                  value={editing.campaignId ?? ""}
+                  onChange={(e) => setEditing({ ...editing, campaignId: e.target.value || undefined })}
+                >
+                  <option value="">—</option>
+                  {campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.ref} · {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Opportunity (optional)</span>
+                <select
+                  className="input"
+                  value={editing.leadId ?? ""}
+                  onChange={(e) => setEditing({ ...editing, leadId: e.target.value || undefined })}
+                >
+                  <option value="">—</option>
+                  {leads.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} · {l.stage}
                     </option>
                   ))}
                 </select>
