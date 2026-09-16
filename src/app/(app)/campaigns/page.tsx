@@ -1,6 +1,6 @@
 import { getCampaigns, getMyProfile } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
-import CampaignTable from "@/components/CampaignTable";
+import CampaignTable, { type CampaignDocuments } from "@/components/CampaignTable";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export default async function CampaignsPage({
   searchParams: Promise<{ new?: string; open?: string; client?: string }>;
 }) {
   const supabase = await createClient();
-  const [campaigns, { data: clients }, { data: staff }, params, profile] = await Promise.all([
+  const [campaigns, { data: clients }, { data: staff }, params, profile, { data: orders }, { data: invoices }] = await Promise.all([
     getCampaigns(),
     // Organisations, not the old clients table: Rick couldn't find Sarah Raven
     // in the dropdown because she exists as an organisation (created via the
@@ -29,7 +29,19 @@ export default async function CampaignsPage({
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
     searchParams,
     getMyProfile(),
+    supabase.from("space_orders").select("id, campaign_id, order_number, supplier_name"),
+    supabase.from("client_invoices").select("id, campaign_id, invoice_no, status"),
   ]);
+
+  // Space Orders and invoices, grouped by campaign, for the drawer's Documents row.
+  const documents: Record<string, CampaignDocuments> = {};
+  const docsFor = (id: string) => (documents[id] ??= { orders: [], invoices: [] });
+  for (const o of (orders ?? []) as { id: string; campaign_id: string; order_number: string | null; supplier_name: string }[]) {
+    docsFor(o.campaign_id).orders.push({ id: o.id, number: o.order_number ?? "—", supplier: o.supplier_name });
+  }
+  for (const i of (invoices ?? []) as { id: string; campaign_id: string | null; invoice_no: string | null; status: string }[]) {
+    if (i.campaign_id) docsFor(i.campaign_id).invoices.push({ id: i.id, number: i.invoice_no, status: i.status });
+  }
   const canBook = profile?.role !== "restricted";
 
   return (
@@ -53,6 +65,7 @@ export default async function CampaignsPage({
         openId={params.open}
         canBook={canBook}
         prefillClient={params.client ?? ""}
+        documents={documents}
       />
     </div>
   );

@@ -24,6 +24,8 @@ export type CampaignLine = {
   end_date: string;
   supplier_gross: number;
   supplier_net: number;
+  /** Commission on this line; 15 on media and 0 on production unless overridden. */
+  commission_pct?: number | null;
   /** Media buys the space; production is the physical cost of the poster or audio. */
   line_type?: "media" | "production";
   client_charge: number;
