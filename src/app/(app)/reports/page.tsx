@@ -50,7 +50,7 @@ export default async function ReportsPage() {
     .map((c) => ({
       client: c.clients?.name ?? "Unassigned",
       owner: c.profiles?.full_name ?? "Unassigned",
-      start: c.start_date,
+      start: c.start_date ?? "",
       amount: clientGross(c),
     }));
 
