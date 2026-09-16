@@ -12,6 +12,7 @@ import {
   STATUS_LABEL,
 } from "@/lib/money";
 import BarList, { type BarRow } from "@/components/BarList";
+import SalesByOwner, { type SalesLine } from "@/components/SalesByOwner";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,16 @@ export default async function ReportsPage() {
     colour: CHANNEL_COLOUR[ch],
     value: channelSpend.get(ch) ?? 0,
   })).filter((r) => r.value > 0);
+
+  // Sales per client per member of the sales team, for the matrix below.
+  const salesLines: SalesLine[] = campaigns
+    .filter((c) => c.status !== "planning" && c.start_date)
+    .map((c) => ({
+      client: c.clients?.name ?? "Unassigned",
+      owner: c.profiles?.full_name ?? "Unassigned",
+      start: c.start_date,
+      amount: clientGross(c),
+    }));
 
   const best = [...withResponse].sort((a, b) => Number(a.cpl) - Number(b.cpl)).slice(0, 8);
 
@@ -149,6 +160,8 @@ export default async function ReportsPage() {
           </div>
         </section>
       </div>
+
+      <SalesByOwner lines={salesLines} today={new Date().toISOString().slice(0, 10)} />
 
       <section className="card">
         <div className="card-head">
