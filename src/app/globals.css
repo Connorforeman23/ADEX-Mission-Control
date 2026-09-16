@@ -461,3 +461,39 @@ td.r, th.r { text-align: right; }
   .print-sheet tfoot { display: table-footer-group; }
   .print-sheet img { max-height: 70px; width: auto; }
 }
+
+/* ---- cosmetics pass, 16 Sept ----------------------------------------------
+   Rules that stop one thing running into another, found on the Reports
+   matrix and applied everywhere the same shapes appear. */
+
+/* Totals rows had no styling at all — only tbody cells did — so a table
+   footer was squashed against the last row. Now a proper closing row. */
+tfoot td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+tfoot tr + tr td { border-top: 0; font-weight: 500; }
+
+/* Numbers never wrap mid-figure; long names in the first column may. */
+td.num, th.num, td.r, th.r { white-space: nowrap; }
+
+/* A wide table inside a card scrolls sideways within the card, not the page. */
+.card > .card-body > .table-wrap { max-width: 100%; }
+
+/* Card heads: the title keeps its line, the sub-label may wrap beneath it. */
+.card-head { flex-wrap: wrap; row-gap: 4px; }
+.card-head h2 { white-space: nowrap; }
+.card-head .sub { flex: 1 1 200px; min-width: 0; }
+
+/* Filter bars on narrow screens: controls stack instead of overflowing. */
+@media (max-width: 720px) {
+  .filters { align-items: stretch; }
+  .filters .field { min-width: 0; flex: 1 1 100%; }
+  .filters > [style*="margin-left: auto"] { margin-left: 0 !important; }
+}
+
+/* Buttons used as row links (Documents on a campaign) shouldn't stretch
+   the row height when several wrap onto two lines. */
+a.btn { line-height: 1.2; }

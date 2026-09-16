@@ -196,9 +196,7 @@ export default function SpendReports({ campaigns, today }: { campaigns: SpendCam
             <BarList rows={view.byOwner} empty="Nothing in this period." />
           </div>
         </section>
-      </div>
 
-      <div className="cols">
         <section className="card">
           <div className="card-head">
             <h2>Spend by channel</h2>
@@ -208,7 +206,10 @@ export default function SpendReports({ campaigns, today }: { campaigns: SpendCam
             <BarList rows={view.byChannel} empty="Nothing in this period." />
           </div>
         </section>
+      </div>
 
+      {/* One column per team member, so this one needs the full width. */}
+      <div style={{ marginBottom: 14 }}>
         <section className="card">
           <div className="card-head">
             <h2>Client by assigned user</h2>
