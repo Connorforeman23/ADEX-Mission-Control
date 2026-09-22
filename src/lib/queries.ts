@@ -82,6 +82,7 @@ export type TaskRow = {
   about: string;
   campaign_id: string | null;
   client_id: string | null;
+  organisation_id: string | null;
   lead_id: string | null;
 };
 
@@ -90,10 +91,11 @@ export async function getTasks(): Promise<TaskRow[]> {
   const { data, error } = await supabase
     .from("tasks")
     .select(
-      `id, title, notes, due_date, done, kind, assignee_id, campaign_id, client_id, lead_id,
+      `id, title, notes, due_date, done, kind, assignee_id, campaign_id, client_id, organisation_id, lead_id,
        assignee:profiles!tasks_assignee_id_fkey ( full_name ),
        campaigns ( ref, name ),
        clients ( name ),
+       organisations ( name ),
        leads ( name )`
     )
     .order("done")
@@ -114,10 +116,12 @@ export async function getTasks(): Promise<TaskRow[]> {
     assignee_id: string | null;
     campaign_id: string | null;
     client_id: string | null;
+    organisation_id: string | null;
     lead_id: string | null;
     assignee: { full_name: string } | null;
     campaigns: { ref: string; name: string } | null;
     clients: { name: string } | null;
+    organisations: { name: string } | null;
     leads: { name: string } | null;
   };
 
@@ -132,11 +136,13 @@ export async function getTasks(): Promise<TaskRow[]> {
     assignee_id: t.assignee_id,
     about:
       (t.campaigns && `${t.campaigns.ref} · ${t.campaigns.name}`) ||
+      t.organisations?.name ||
       t.clients?.name ||
       (t.leads && `Lead: ${t.leads.name}`) ||
       "",
     campaign_id: t.campaign_id,
     client_id: t.client_id,
+    organisation_id: t.organisation_id,
     lead_id: t.lead_id,
   }));
 }

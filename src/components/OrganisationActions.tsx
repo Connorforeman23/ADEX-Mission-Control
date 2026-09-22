@@ -52,6 +52,9 @@ export default function OrganisationActions({
         <Link className="btn" href={`/contacts?new=1&org=${company}`}>
           Add contact
         </Link>
+        <Link className="btn" href={`/tasks?new=1&org=${company}`}>
+          Add task
+        </Link>
         <Link className="btn" href={`/pipeline?new=1&org=${company}`}>
           Add opportunity
         </Link>

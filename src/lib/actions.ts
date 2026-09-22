@@ -461,6 +461,8 @@ export type TaskInput = {
   assigneeId: string;
   campaignId?: string;
   clientId?: string;
+  /** Any organisation — client or supplier. Replaces clientId for new tasks. */
+  organisationId?: string;
   leadId?: string;
 };
 
@@ -479,6 +481,7 @@ export async function saveTask(input: TaskInput) {
     assignee_id: input.assigneeId || null,
     campaign_id: input.campaignId || null,
     client_id: input.clientId || null,
+    organisation_id: input.organisationId || null,
     lead_id: input.leadId || null,
     created_by: user.id,
   };
