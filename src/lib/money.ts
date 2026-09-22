@@ -42,6 +42,8 @@ export type CampaignLine = {
 };
 
 export type Campaign = {
+  /** When the campaign was created — a won deal opens one, so this is "won". */
+  created_at?: string | null;
   id: string;
   ref: string;
   name: string;
@@ -95,6 +97,16 @@ export const productionSpend = (c: Campaign) =>
 
 /** The 15% commission element of profit, separate from any markup. */
 export const commissionOf = (c: Campaign) => supplierGross(c) - supplierNet(c);
+
+/**
+ * What the sales owner earns on a campaign: 15% of the profit.
+ *
+ * NOT to be confused with agency commission above — that is 15% off the
+ * supplier's rate card and is how ADEX makes money. This is 15% of what ADEX
+ * made, and is how the rep is paid. Two different 15%s; keep the names apart.
+ */
+export const REP_COMMISSION_PCT = 15;
+export const repCommission = (c: Campaign) => (dealProfit(c) * REP_COMMISSION_PCT) / 100;
 
 /** Profit earned by charging above supplier gross. */
 export const markupOf = (c: Campaign) =>

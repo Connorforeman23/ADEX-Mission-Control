@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getCampaigns, getOpenLeads, getPoVariances, getTasks, getMyProfile } from "@/lib/queries";
 import QuickNew from "@/components/QuickNew";
 import ScopeToggle from "@/components/ScopeToggle";
+import MyWeek from "@/components/MyWeek";
+import RecentlyWon from "@/components/RecentlyWon";
 import {
   CHANNELS,
   CHANNEL_COLOUR,
@@ -33,18 +35,50 @@ export default async function DashboardPage({
     searchParams,
   ]);
   const canBook = profile?.role !== "restricted";
-
-  // Steve wants the whole business; an account manager wants their own desk.
-  // Same page, one toggle — and everything below it follows the choice.
   const me = profile?.full_name ?? "";
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Two dashboards, chosen by role.
+  //
+  // Admins — Steve, Connor, Rick — get the business: every campaign, billings
+  // by sales team, company profit, with a Mine/Everyone toggle for when they
+  // want their own desk. Everyone else gets MyWeek: their campaigns, their
+  // follow-ups, their own money, and none of the company-wide figures.
+  const isAdmin = profile?.role === "admin";
+
+  const myCampaigns = allCampaigns.filter((c) => c.profiles?.full_name === me);
+  const myLeads = allLeads.filter((l) => l.profiles?.full_name === me);
+  const myTasks = allTasks.filter((t) => t.assignee === me);
+
+  if (!isAdmin) {
+    return (
+      <div className="page">
+        <div className="page-head">
+          <div>
+            <div className="eyebrow">Mission control</div>
+            <h1>{me ? `${me.split(" ")[0]}'s week` : "My week"}</h1>
+            <p>Your campaigns, your follow-ups and how your book is doing.</p>
+          </div>
+          <QuickNew canBook={canBook} />
+        </div>
+
+        <MyWeek name={me} campaigns={myCampaigns} leads={myLeads} tasks={myTasks} today={today} />
+
+        <div style={{ marginTop: 14 }}>
+          <RecentlyWon campaigns={myCampaigns} showCommission />
+        </div>
+      </div>
+    );
+  }
+
+  // --- admin from here: the whole business, with a Mine/Everyone toggle.
   const scope: "mine" | "all" = params.scope === "mine" ? "mine" : "all";
   const mine = scope === "mine";
 
-  const campaigns = mine ? allCampaigns.filter((c) => c.profiles?.full_name === me) : allCampaigns;
-  const leads = mine ? allLeads.filter((l) => l.profiles?.full_name === me) : allLeads;
-  const tasks = mine ? allTasks.filter((t) => t.assignee === me) : allTasks;
+  const campaigns = mine ? myCampaigns : allCampaigns;
+  const leads = mine ? myLeads : allLeads;
+  const tasks = mine ? myTasks : allTasks;
 
-  const today = new Date().toISOString().slice(0, 10);
   const dueTasks = tasks.filter((t) => !t.done && t.due_date && t.due_date <= today).slice(0, 5);
 
   const liveCampaigns = campaigns.filter((c) => c.status === "live" || c.status === "risk");
@@ -343,6 +377,10 @@ export default async function DashboardPage({
           </div>
         </section>
       )}
+
+      <div style={{ marginTop: 14 }}>
+        <RecentlyWon campaigns={campaigns} showOwner={!mine} showCommission={mine} />
+      </div>
     </div>
   );
 }

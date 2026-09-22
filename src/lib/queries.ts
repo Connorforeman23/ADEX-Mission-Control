@@ -29,7 +29,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
   const { data, error } = await supabase
     .from("campaigns")
     .select(
-      `id, ref, name, status, region, start_date, end_date, fee, billed, leads, cpl, client_po,
+      `id, ref, name, status, region, start_date, end_date, fee, billed, leads, cpl, client_po, created_at,
        clients ( name ),
        profiles ( full_name ),
        campaign_lines ( id, channel, vendor, publication, detail, line_type, start_date, end_date, selected_dates,
