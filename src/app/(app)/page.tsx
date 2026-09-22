@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCampaigns, getOpenLeads, getPoVariances, getTasks, getMyProfile } from "@/lib/queries";
 import QuickNew from "@/components/QuickNew";
+import ScopeToggle from "@/components/ScopeToggle";
 import {
   CHANNELS,
   CHANNEL_COLOUR,
@@ -18,20 +19,46 @@ import BarList, { type BarRow } from "@/components/BarList";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
-  const [campaigns, leads, variances, tasks, profile] = await Promise.all([
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ scope?: string }>;
+}) {
+  const [allCampaigns, allLeads, variances, allTasks, profile, params] = await Promise.all([
     getCampaigns(),
     getOpenLeads(),
     getPoVariances(),
     getTasks(),
     getMyProfile(),
+    searchParams,
   ]);
   const canBook = profile?.role !== "restricted";
+
+  // Steve wants the whole business; an account manager wants their own desk.
+  // Same page, one toggle — and everything below it follows the choice.
+  const me = profile?.full_name ?? "";
+  const scope: "mine" | "all" = params.scope === "mine" ? "mine" : "all";
+  const mine = scope === "mine";
+
+  const campaigns = mine ? allCampaigns.filter((c) => c.profiles?.full_name === me) : allCampaigns;
+  const leads = mine ? allLeads.filter((l) => l.profiles?.full_name === me) : allLeads;
+  const tasks = mine ? allTasks.filter((t) => t.assignee === me) : allTasks;
+
   const today = new Date().toISOString().slice(0, 10);
   const dueTasks = tasks.filter((t) => !t.done && t.due_date && t.due_date <= today).slice(0, 5);
 
   const liveCampaigns = campaigns.filter((c) => c.status === "live" || c.status === "risk");
   const openBook = campaigns.filter((c) => c.status !== "done");
+
+  // Starting soon is an account manager's question: what do I need ready?
+  const soon = new Date();
+  soon.setDate(soon.getDate() + 14);
+  const startingSoon = campaigns
+    .filter((c) => c.status === "booked" && c.start_date && c.start_date > today && c.start_date <= soon.toISOString().slice(0, 10))
+    .sort((a, b) => (a.start_date ?? "").localeCompare(b.start_date ?? ""));
+
+  // An opportunity with no next action is one nobody is working.
+  const stalled = leads.filter((l) => !l.next_action);
 
   const totalGross = campaigns.reduce((a, c) => a + clientGross(c), 0);
   const totalProfit = campaigns.reduce((a, c) => a + dealProfit(c), 0);
@@ -81,11 +108,16 @@ export default async function DashboardPage() {
           <h1>Dashboard</h1>
           <p>
             {campaigns.length
-              ? `${campaigns.length} campaign${campaigns.length === 1 ? "" : "s"} on the book, ${liveCampaigns.length} live in market.`
-              : "Nothing booked yet — add your first campaign to bring this to life."}
+              ? `${mine ? "Your" : "The"} book: ${campaigns.length} campaign${campaigns.length === 1 ? "" : "s"}, ${liveCampaigns.length} live in market.`
+              : mine
+                ? "Nothing assigned to you yet — switch to Everyone to see the whole business."
+                : "Nothing booked yet — add your first campaign to bring this to life."}
           </p>
         </div>
-        <QuickNew canBook={canBook} />
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginLeft: "auto" }}>
+          <ScopeToggle scope={scope} />
+          <QuickNew canBook={canBook} />
+        </div>
       </div>
 
       <div className="kpis">
@@ -119,15 +151,46 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Billings by sales team</h2>
-            <span className="sub">Client gross per owner</span>
-          </div>
-          <div className="card-body">
-            <BarList rows={salesRows} empty="No campaigns assigned yet." />
-          </div>
-        </section>
+        {mine ? (
+          <section className="card">
+            <div className="card-head">
+              <h2>Starting soon</h2>
+              <span className="sub">Booked, in the next fortnight</span>
+            </div>
+            <div className="card-body">
+              {startingSoon.length === 0 ? (
+                <p className="empty-note">Nothing starting in the next two weeks.</p>
+              ) : (
+                <div className="rows">
+                  {startingSoon.map((c) => (
+                    <Link className="row" href={`/campaigns?open=${c.id}`} key={c.id}>
+                      <div className="grow">
+                        <p>
+                          {c.ref} · {c.name}
+                        </p>
+                        <small>{c.clients?.name ?? "—"}</small>
+                      </div>
+                      <span className="num sub-line" style={{ whiteSpace: "nowrap" }}>
+                        {c.start_date}
+                      </span>
+                      <span className="num strong">{gbp(clientGross(c))}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        ) : (
+          <section className="card">
+            <div className="card-head">
+              <h2>Billings by sales team</h2>
+              <span className="sub">Client gross per owner</span>
+            </div>
+            <div className="card-body">
+              <BarList rows={salesRows} empty="No campaigns assigned yet." />
+            </div>
+          </section>
+        )}
       </div>
 
       <div className="cols">
@@ -184,7 +247,9 @@ export default async function DashboardPage() {
         <section className="card">
           <div className="card-head">
             <h2>Needs attention</h2>
-            <span className="sub">{variances.length + lowMargin.length + dueTasks.length} open</span>
+            <span className="sub">
+              {variances.length + lowMargin.length + dueTasks.length + stalled.length} open
+            </span>
           </div>
           <div className="card-body">
             {dueTasks.length > 0 && (
@@ -205,10 +270,22 @@ export default async function DashboardPage() {
                 ))}
               </div>
             )}
-            {variances.length === 0 && lowMargin.length === 0 && dueTasks.length === 0 ? (
+            {variances.length === 0 && lowMargin.length === 0 && dueTasks.length === 0 && stalled.length === 0 ? (
               <p className="empty-note">Nothing flagged. Margin floor is {MARGIN_FLOOR}%.</p>
             ) : (
               <div className="rows">
+                {stalled.map((l) => (
+                  <Link className="row" href="/pipeline" key={l.id}>
+                    <span className="flag warn">!</span>
+                    <div className="grow">
+                      <p>{l.name} has no next action</p>
+                      <small>
+                        {l.stage} · {l.profiles?.full_name ?? "Unassigned"}
+                      </small>
+                    </div>
+                    <span className="num" style={{ whiteSpace: "nowrap" }}>{gbp(Number(l.value))}</span>
+                  </Link>
+                ))}
                 {variances.map((v) => (
                   <Link className="row" href="/finance" key={v.line_id}>
                     <span className="flag crit">PO</span>
