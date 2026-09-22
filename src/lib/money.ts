@@ -44,6 +44,8 @@ export type CampaignLine = {
 export type Campaign = {
   /** When the campaign was created — a won deal opens one, so this is "won". */
   created_at?: string | null;
+  /** The sales owner's user id — what "mine" is matched on, never the name. */
+  owner_id?: string | null;
   id: string;
   ref: string;
   name: string;
@@ -118,8 +120,23 @@ export const vatOn = (exVat: number) => Math.round(exVat * VAT_RATE);
 
 export const gbp = (n: number) => "£" + Math.round(n).toLocaleString("en-GB");
 
-export const gbpK = (n: number) =>
-  n >= 1000 ? "£" + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : "£" + Math.round(n);
+/**
+ * A figure at a glance: £940, £9.4k, £94k, £1.1m.
+ *
+ * Millions get their own unit — "£1000k" is not how anyone says it.
+ * One decimal below ten of a unit, none above, so the width stays steady.
+ */
+export const gbpK = (n: number) => {
+  const sign = n < 0 ? "-" : "";
+  const v = Math.abs(n);
+  // Up to two decimals, but no trailing zeros: £1.15m, £1.1m, £1m — never
+  // "£1.00m", which reads as precision that isn't there.
+  const trim = (x: number, dp: number) => x.toFixed(dp).replace(/\.?0+$/, "");
+  // 999,999 rounds to 1000k, which nobody says — so it crosses to millions too.
+  if (v >= 999_500) return `${sign}£${trim(v / 1_000_000, 2)}m`;
+  if (v >= 1000) return `${sign}£${trim(v / 1000, v >= 10_000 ? 0 : 1)}k`;
+  return `${sign}£${Math.round(v)}`;
+};
 
 // --- dates -------------------------------------------------------------
 // Postgres hands back ISO (2026-08-03); everything shown to the team is

@@ -46,9 +46,12 @@ export default async function DashboardPage({
   // follow-ups, their own money, and none of the company-wide figures.
   const isAdmin = profile?.role === "admin";
 
-  const myCampaigns = allCampaigns.filter((c) => c.profiles?.full_name === me);
-  const myLeads = allLeads.filter((l) => l.profiles?.full_name === me);
-  const myTasks = allTasks.filter((t) => t.assignee === me);
+  // Matched on the signed-in user's id, never their name: two people can share
+  // a name, and a name can be corrected — an id cannot drift.
+  const myId = profile?.id ?? "";
+  const myCampaigns = allCampaigns.filter((c) => c.owner_id === myId);
+  const myLeads = allLeads.filter((l) => l.owner_id === myId);
+  const myTasks = allTasks.filter((t) => t.assignee_id === myId);
 
   if (!isAdmin) {
     return (

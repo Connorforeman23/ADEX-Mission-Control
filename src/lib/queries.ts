@@ -29,7 +29,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
   const { data, error } = await supabase
     .from("campaigns")
     .select(
-      `id, ref, name, status, region, start_date, end_date, fee, billed, leads, cpl, client_po, created_at,
+      `id, ref, name, status, region, start_date, end_date, fee, billed, leads, cpl, client_po, created_at, owner_id,
        clients ( name ),
        profiles ( full_name ),
        campaign_lines ( id, channel, vendor, publication, detail, line_type, start_date, end_date, selected_dates,
@@ -172,6 +172,8 @@ export type Lead = {
   value: number;
   stage: string;
   next_action: string | null;
+  /** The sales owner's user id — what "mine" is matched on, never the name. */
+  owner_id: string | null;
   profiles: { full_name: string } | null;
 };
 
@@ -179,7 +181,7 @@ export async function getOpenLeads(): Promise<Lead[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("leads")
-    .select("id, name, value, stage, next_action, profiles ( full_name )")
+    .select("id, name, value, stage, next_action, owner_id, profiles ( full_name )")
     .in("stage", ["Engaged", "Proposal"]);
   return (data ?? []) as unknown as Lead[];
 }
