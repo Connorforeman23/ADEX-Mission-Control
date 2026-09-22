@@ -92,32 +92,35 @@ Already proposed (`docs/4.2_MAILBOX_PROPOSAL.md`). Rick's items that land here:
 
 ---
 
-## Decisions needed before the packages that depend on them
+## Decisions — answered (16–22 Sept)
 
-**A. Payment terms and the due date (5.2).** Today every invoice is dated month
-end and due the 25th of the next month — taken from the Randox invoices. With
-terms per client (30/45/60 from publication or from month end), the due date
-becomes a calculation. Proposed: the client's terms set the due date; the "25th"
-rule becomes the default for clients with no terms recorded. Confirm.
+**A. Payment terms and the due date.** ANSWERED: keep the 25th of the following
+month as the default until a client's own terms are recorded. Built in 5.2 —
+terms per organisation set the due date and the sentence at the foot of the
+invoice; no terms recorded keeps the house default.
 
-**B. Monthly invoicing for multi-month campaigns (5.3).** The current rule —
-one invoice per campaign — came from the Randox invoices and it holds for
-most. Randox's own multi-month bookings break it. Proposed: a campaign can be
-split into **invoice periods** (months); each period is its own invoice
-carrying the lines that fall in it, with a multi-month line's charge split by
-days in each month. Preview shows the split before anything is saved. The
-"Invoiced" toggle on Reports then means "every period invoiced". Confirm the
-split rule, or say if it's always an equal split by month.
+**B. Monthly invoicing for multi-month campaigns.** ANSWERED, and narrower than
+proposed: **no splitting a line across months.** A line is invoiced whole, in
+the month it runs. At the end of September ADEX invoices everything running in
+October — so a line that starts and finishes inside October is invoiced then,
+and nothing else is. Randox only, as a per-client setting; everyone else stays
+one invoice per campaign. A line crossing a month end is taken as belonging to
+the month it STARTS — confirm if it should be the month it finishes.
 
-**C. Pipeline + campaigns revenue view (5.3).** What question is it answering?
-"What will we bill in November?" needs booked campaigns by start month plus
-open opportunities weighted by stage (Engaged 40%, Proposal 70% today). If it's
-instead "what's the total potential", weightings don't matter. Say which, and
-whether the weightings are right.
+**C. Pipeline + campaigns revenue view.** ANSWERED: **do not merge them.**
+Campaigns and pipeline stay separate on the dashboards, so committed revenue is
+never blended with hoped-for revenue. No weighted forecast screen is being
+built. Already true on both dashboards — nothing to do.
 
-**D. Production suppliers (5.1).** The list, from Rick.
+**D. Production suppliers.** Connor is sending the list.
 
----
+**E. Role-based dashboards** — raised 22 Sept, built the same day. Admins keep
+the business view with a Mine/Everyone toggle. Everyone else gets "My week":
+their campaigns, follow-ups and their own money — billings, profit, and 15% of
+profit as their commission, which is NOT the agency's 15% off supplier gross.
+Two assumptions to confirm: commission counts on campaigns as BOOKED, not
+invoiced or paid; and "recently won" means a campaign created in the last 30
+days.
 
 ## Order
 
