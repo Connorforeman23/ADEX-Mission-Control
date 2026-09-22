@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { dateGB, gbp } from "@/lib/money";
 import { setInvoiceStatus } from "@/lib/actions";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export type InvoiceRow = {
   id: string;
@@ -50,24 +51,11 @@ export default function ClientInvoices({
   }
 
   return (
-    <section className="card" style={{ marginTop: 14 }}>
-      <div className="card-head">
-        <h2>Client invoices</h2>
-        <span className="sub">Client gross + VAT — supplier costs never appear here</span>
-        <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button
-            className="btn"
-            onClick={() =>
-              setError(
-                "Invoices go to Xero one at a time, from the invoice itself — open a draft and " +
-                  "press Push to Xero. Xero assigns the number."
-              )
-            }
-          >
-            ⚡ Sync with Xero
-          </button>
-        </span>
-      </div>
+    <CollapsibleCard
+      id="finance-invoices"
+      title="Client invoices"
+      sub="Client gross + VAT — supplier costs never appear here"
+    >
       <div className="card-body" style={{ paddingTop: 8 }}>
         {error && (
           <p style={{ color: "var(--warn)", fontSize: 12.5, margin: "0 0 10px" }}>{error}</p>
@@ -168,6 +156,6 @@ export default function ClientInvoices({
           </div>
         )}
       </div>
-    </section>
+    </CollapsibleCard>
   );
 }

@@ -8,24 +8,32 @@ import { dateGB } from "@/lib/money";
 import { deleteTask, saveTask, toggleTask, type TaskInput } from "@/lib/actions";
 import type { TaskRow } from "@/lib/queries";
 
-const blank = (assigneeId: string): TaskInput => ({
+const blank = (assigneeId: string, organisationId?: string): TaskInput => ({
   title: "",
   notes: "",
   dueDate: "",
   assigneeId,
+  organisationId: organisationId || undefined,
 });
 
 export default function TasksPanel({
   tasks,
   staff,
-  clients,
+  organisations,
+  prefillOrg = "",
+  campaigns,
+  leads,
   meId,
   today,
   openNew,
 }: {
   tasks: TaskRow[];
   staff: { id: string; full_name: string }[];
-  clients: { id: string; name: string; owner_id: string | null }[];
+  organisations: { id: string; name: string; owner_id: string | null; is_supplier: boolean; customer_status: string }[];
+  /** Organisation name carried through from an organisation page. */
+  prefillOrg?: string;
+  campaigns: { id: string; ref: string; name: string }[];
+  leads: { id: string; name: string; stage: string }[];
   /** Signed-in user — new tasks default to them. */
   meId: string;
   today: string;
@@ -33,15 +41,23 @@ export default function TasksPanel({
 }) {
   const router = useRouter();
   const [who, setWho] = useState("All");
-  const [show, setShow] = useState<"open" | "done">("open");
+  const [show, setShow] = useState<"open" | "due" | "done">("open");
   const defaultAssignee = staff.some((s) => s.id === meId) ? meId : staff[0]?.id ?? "";
-  const [editing, setEditing] = useState<TaskInput | null>(openNew ? blank(defaultAssignee) : null);
+  const prefillOrgId = organisations.find((o) => o.name === prefillOrg)?.id;
+  const [editing, setEditing] = useState<TaskInput | null>(
+    openNew ? blank(defaultAssignee, prefillOrgId) : null
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const rows = tasks.filter(
-    (t) => (show === "open" ? !t.done : t.done) && (who === "All" || t.assignee === who)
-  );
+  // "Due" is the working list: everything due today or already late.
+  const rows = tasks.filter((t) => {
+    if (who !== "All" && t.assignee !== who) return false;
+    if (show === "done") return t.done;
+    if (show === "due") return !t.done && !!t.due_date && t.due_date <= today;
+    return !t.done;
+  });
+  const dueCount = tasks.filter((t) => !t.done && !!t.due_date && t.due_date <= today).length;
 
   async function save() {
     if (!editing) return;
@@ -51,6 +67,21 @@ export default function TasksPanel({
     if (res.error) return setError(res.error);
     setEditing(null);
     router.refresh();
+  }
+
+  function openEdit(t: TaskRow) {
+    setError(null);
+    setEditing({
+      id: t.id,
+      title: t.title,
+      notes: t.notes ?? "",
+      dueDate: t.due_date ?? "",
+      assigneeId: t.assignee_id ?? "",
+      campaignId: t.campaign_id ?? undefined,
+      clientId: t.client_id ?? undefined,
+      organisationId: t.organisation_id ?? undefined,
+      leadId: t.lead_id ?? undefined,
+    });
   }
 
   async function tick(t: TaskRow) {
@@ -76,6 +107,7 @@ export default function TasksPanel({
             onChange={setShow}
             options={[
               { value: "open", label: "Open" },
+              { value: "due", label: dueCount ? `Due (${dueCount})` : "Due" },
               { value: "done", label: "Done" },
             ]}
           />
@@ -97,7 +129,9 @@ export default function TasksPanel({
             <p className="empty-note">
               {show === "open"
                 ? "Nothing outstanding. Tasks raised from campaigns, pipeline and clients land here."
-                : "Nothing completed yet."}
+                : show === "due"
+                  ? "Nothing due today and nothing overdue."
+                  : "Nothing completed yet."}
             </p>
           ) : (
             <div className="table-wrap">
@@ -127,9 +161,14 @@ export default function TasksPanel({
                           />
                         </td>
                         <td>
-                          <div className="strong" style={t.done ? { textDecoration: "line-through", color: "var(--faint)" } : undefined}>
+                          <button
+                            type="button"
+                            className="link-btn strong"
+                            style={t.done ? { textDecoration: "line-through", color: "var(--faint)" } : undefined}
+                            onClick={() => openEdit(t)}
+                          >
                             {t.title}
-                          </div>
+                          </button>
                           {t.notes && <div className="sub-line">{t.notes}</div>}
                         </td>
                         <td className="sub-line">{t.about || "—"}</td>
@@ -139,22 +178,7 @@ export default function TasksPanel({
                           {overdue ? " ⚠" : ""}
                         </td>
                         <td>
-                          <button
-                            className="row-edit"
-                            aria-label={`Edit ${t.title}`}
-                            onClick={() =>
-                              setEditing({
-                                id: t.id,
-                                title: t.title,
-                                notes: t.notes ?? "",
-                                dueDate: t.due_date ?? "",
-                                assigneeId: t.assignee_id ?? "",
-                                campaignId: t.campaign_id ?? undefined,
-                                clientId: t.client_id ?? undefined,
-                                leadId: t.lead_id ?? undefined,
-                              })
-                            }
-                          >
+                          <button className="row-edit" aria-label={`Edit ${t.title}`} onClick={() => openEdit(t)}>
                             <svg viewBox="0 0 24 24">
                               <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                             </svg>
@@ -213,27 +237,58 @@ export default function TasksPanel({
                 </select>
               </label>
               <label className="field">
-                <span>Client (optional)</span>
+                <span>Organisation (optional)</span>
                 <select
                   className="input"
-                  value={editing.clientId ?? ""}
+                  value={editing.organisationId ?? ""}
                   onChange={(e) => {
-                    const clientId = e.target.value || undefined;
-                    // Choosing a client hands the task to that client's owner.
+                    const organisationId = e.target.value || undefined;
+                    // Choosing a company hands the task to that company's owner.
                     // They can still reassign it — this is a default, not a rule.
-                    const owner = clients.find((c) => c.id === clientId)?.owner_id;
+                    const owner = organisations.find((o) => o.id === organisationId)?.owner_id;
                     const ownerOnStaff = owner && staff.some((s) => s.id === owner);
                     setEditing({
                       ...editing,
-                      clientId,
+                      organisationId,
                       assigneeId: ownerOnStaff ? owner : editing.assigneeId,
                     });
                   }}
                 >
                   <option value="">—</option>
-                  {clients.map((c) => (
+                  {organisations.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                      {o.is_supplier && o.customer_status === "none" ? " (supplier)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Campaign (optional)</span>
+                <select
+                  className="input"
+                  value={editing.campaignId ?? ""}
+                  onChange={(e) => setEditing({ ...editing, campaignId: e.target.value || undefined })}
+                >
+                  <option value="">—</option>
+                  {campaigns.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}
+                      {c.ref} · {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Opportunity (optional)</span>
+                <select
+                  className="input"
+                  value={editing.leadId ?? ""}
+                  onChange={(e) => setEditing({ ...editing, leadId: e.target.value || undefined })}
+                >
+                  <option value="">—</option>
+                  {leads.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} · {l.stage}
                     </option>
                   ))}
                 </select>

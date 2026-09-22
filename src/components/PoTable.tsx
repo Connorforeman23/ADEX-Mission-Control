@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
+import CollapsibleCard from "@/components/CollapsibleCard";
 import { channelLabel, dateGB, gbp, rangeGB } from "@/lib/money";
 import {
   reconcile,
@@ -76,13 +77,11 @@ export default function PoTable({
 
   return (
     <>
-      <section className="card">
-        <div className="card-head">
-          <h2>Purchase orders</h2>
-          <span className="sub">
-            One per booking line · net is gross less 15% · VAT 20% on the net
-          </span>
-        </div>
+      <CollapsibleCard
+        id="finance-orders"
+        title="Purchase orders"
+        sub="One per booking line · net is gross less 15% · VAT 20% on the net"
+      >
         <div className="card-body" style={{ padding: 0 }}>
           {orders.length === 0 ? (
             <p className="empty-note" style={{ padding: "20px 16px" }}>
@@ -138,7 +137,7 @@ export default function PoTable({
             </div>
           )}
         </div>
-      </section>
+      </CollapsibleCard>
 
       <Drawer
         open={!!open}

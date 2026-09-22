@@ -137,6 +137,8 @@ export const ADEX = {
   phone: "01474 365 155",
   web: "www.advertisingexcellence.co.uk",
   invoicesTo: ["Lynsey.tester@advertisingexcellence.co.uk", "Accounts@advertisingexcellence.co.uk"],
+  /** Where clients send invoice queries — printed on every invoice. */
+  accountsEmail: "Accounts@advertisingexcellence.co.uk",
 };
 
 export type SpaceOrderRow = {
@@ -171,7 +173,20 @@ export type SpaceOrder = {
   total: number;
   /** Contacts already saved against this supplier, for the "To:" dropdown. */
   contacts: { id: string; name: string }[];
+  /** Where the supplier wants orders sent — from their organisation record. */
+  orderEmail: string;
+  /** The supplier's payment terms, printed on the order; "" if none recorded. */
+  paymentTerms: string;
 };
+
+/** Everyone copied on every Space Order that leaves the building. */
+export const ORDER_CC = ["Lynsey.tester@advertisingexcellence.co.uk", "Steve.foreman@advertisingexcellence.co.uk"];
+
+/** "30 days from end of month" — the terms as they read on a document. */
+export function termsLabel(days: number | null, basis: string | null) {
+  if (!days) return "";
+  return `${days} days from ${basis === "publication" ? "date of publication" : "end of month"}`;
+}
 
 /** 07.09.26 — the format the real Space Orders use. */
 export function poDate(iso: string | null | undefined) {
@@ -203,10 +218,14 @@ export function spaceOrderRows(
   commissionPct: number,
   isProduction = false
 ): SpaceOrderRow[] {
+  // Selected dates are stored as ISO since 5.1; older lines may still hold
+  // whatever was typed. Print ISO in the order's own form, pass anything else
+  // through untouched.
   const dates = (selectedDates ?? "")
     .split(/[,;\n]+/)
     .map((d) => d.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? poDate(d) : d));
 
   const list = dates.length
     ? dates

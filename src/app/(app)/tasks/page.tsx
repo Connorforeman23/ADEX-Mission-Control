@@ -7,19 +7,24 @@ export const dynamic = "force-dynamic";
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; org?: string }>;
 }) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const [tasks, { data: staff }, { data: clients }, params] = await Promise.all([
+  const [tasks, { data: staff }, { data: clients }, params, { data: campaignRows }, { data: leadRows }] = await Promise.all([
     getTasks(),
     supabase.from("profiles").select("id, full_name").order("full_name"),
-    // owner_id comes along so a task for a client defaults to whoever owns
-    // that client (Rick), rather than to whoever happens to be typing.
-    supabase.from("clients").select("id, name, owner_id").order("name"),
+    // Any organisation, client or supplier — "chase Plug for the Modern Milkman
+    // proposal" is a task about a supplier. owner_id comes along so a task for
+    // a company defaults to whoever owns that company.
+    supabase.from("organisations").select("id, name, owner_id, is_supplier, customer_status").eq("archived", false).order("name"),
     searchParams,
+    // A task can point at the campaign or the opportunity it is about, not
+    // only the client (Rick) — so the org page can list everything about them.
+    supabase.from("campaigns").select("id, ref, name").neq("status", "done").order("ref", { ascending: false }),
+    supabase.from("leads").select("id, name, stage").in("stage", ["Engaged", "Proposal"]).order("name"),
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -76,7 +81,10 @@ export default async function TasksPage({
       <TasksPanel
         tasks={tasks}
         staff={staff ?? []}
-        clients={clients ?? []}
+        organisations={(clients ?? []) as { id: string; name: string; owner_id: string | null; is_supplier: boolean; customer_status: string }[]}
+        prefillOrg={params.org ?? ""}
+        campaigns={(campaignRows ?? []) as { id: string; ref: string; name: string }[]}
+        leads={(leadRows ?? []) as { id: string; name: string; stage: string }[]}
         meId={user?.id ?? ""}
         today={today}
         openNew={params.new === "1"}

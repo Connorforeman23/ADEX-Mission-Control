@@ -24,12 +24,18 @@ export default async function PipelinePage({
   searchParams: Promise<{ new?: string; org?: string }>;
 }) {
   const supabase = await createClient();
-  const [{ data: leadRows }, { data: staff }, params] = await Promise.all([
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const [{ data: leadRows }, { data: staff }, { data: orgs }, params] = await Promise.all([
     supabase
       .from("leads")
       .select("id, name, contact, sector, value, stage, next_action, owner_id, channels, proposal_note, profiles ( full_name )")
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, full_name").eq("is_sales", true).order("full_name"),
+    // Companies for the opportunity form — a dropdown, so names can never
+    // drift from the organisation record (Rick).
+    supabase.from("organisations").select("id, name").eq("archived", false).order("name"),
     searchParams,
   ]);
 
@@ -90,7 +96,14 @@ export default async function PipelinePage({
         </div>
       </div>
 
-      <PipelineBoard leads={leads} staff={staff ?? []} openNew={params.new === "1"} prefillOrg={params.org ?? ""} />
+      <PipelineBoard
+        leads={leads}
+        staff={staff ?? []}
+        organisations={(orgs ?? []) as { id: string; name: string }[]}
+        meId={user?.id ?? ""}
+        openNew={params.new === "1"}
+        prefillOrg={params.org ?? ""}
+      />
     </div>
   );
 }

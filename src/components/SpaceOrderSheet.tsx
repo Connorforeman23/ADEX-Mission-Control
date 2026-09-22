@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ADEX, type SpaceOrder } from "@/lib/po";
+import { ADEX, ORDER_CC, type SpaceOrder } from "@/lib/po";
 import { dateGB } from "@/lib/money";
 import { saveSpaceOrderDetails } from "@/lib/actions";
 import { printAs } from "@/lib/print";
@@ -41,6 +41,13 @@ export default function SpaceOrderSheet({ order }: { order: SpaceOrder }) {
     // The PDF takes the order number as its name — VCC0002.pdf.
     printAs(order.po);
   }
+
+  // Until the CRM can send mail itself (4.4), this opens Outlook with the
+  // supplier's order address, Lynsey and Steve copied, and the subject set —
+  // the PDF is attached by hand. One click instead of five.
+  const mailto = order.orderEmail
+    ? `mailto:${encodeURIComponent(order.orderEmail)}?cc=${encodeURIComponent(ORDER_CC.join(","))}&subject=${encodeURIComponent(`Space Order ${order.po} — ${order.client}`)}&body=${encodeURIComponent(`Please find attached Space Order ${order.po} for ${order.client}.\n\nPlease confirm receipt.\n\n${order.fromName}\n${ADEX.name}`)}`
+    : null;
 
   return (
     <>
@@ -84,6 +91,15 @@ export default function SpaceOrderSheet({ order }: { order: SpaceOrder }) {
           <button className="btn btn-primary" onClick={saveThenPrint} disabled={busy}>
             Print / Save as PDF
           </button>
+          {mailto ? (
+            <a className="btn" href={mailto} title={`To ${order.orderEmail} · cc ${ORDER_CC.join(", ")}`}>
+              Email to supplier
+            </a>
+          ) : (
+            <span className="sub-line" style={{ alignSelf: "center" }}>
+              No order address on this supplier yet — add one on their organisation page.
+            </span>
+          )}
         </div>
       </div>
       {error && <p style={{ color: "var(--crit)", fontSize: 12.5 }}>{error}</p>}
@@ -128,6 +144,14 @@ export default function SpaceOrderSheet({ order }: { order: SpaceOrder }) {
               <th>Copy Details / URN</th>
               <td>{order.copy}</td>
             </tr>
+            {order.paymentTerms && (
+              <tr>
+                <th></th>
+                <td></td>
+                <th>Payment Terms</th>
+                <td>{order.paymentTerms}</td>
+              </tr>
+            )}
           </tbody>
         </table>
 

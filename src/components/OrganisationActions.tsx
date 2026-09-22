@@ -31,6 +31,9 @@ export default function OrganisationActions({
     statusReason: "",
     companiesHouseNo: org.companies_house_no ?? "",
     website: org.website ?? "",
+    paymentTermsDays: org.paymentTermsDays ? String(org.paymentTermsDays) : "",
+    paymentTermsBasis: org.paymentTermsBasis ?? "month_end",
+    orderEmail: org.orderEmail ?? "",
     addressLine1: org.addressLine1 ?? "",
     addressLine2: org.addressLine2 ?? "",
     city: org.city ?? "",
@@ -51,6 +54,9 @@ export default function OrganisationActions({
         </button>
         <Link className="btn" href={`/contacts?new=1&org=${company}`}>
           Add contact
+        </Link>
+        <Link className="btn" href={`/tasks?new=1&org=${company}`}>
+          Add task
         </Link>
         <Link className="btn" href={`/pipeline?new=1&org=${company}`}>
           Add opportunity

@@ -70,6 +70,15 @@ export type OrgCampaign = {
   value: number;
 };
 
+export type OrgOrder = {
+  id: string;
+  number: string;
+  campaignRef: string;
+  campaignName: string;
+  client: string;
+  net: number;
+};
+
 export type OrgInvoice = {
   id: string;
   invoice_no: string | null;
@@ -106,7 +115,15 @@ export type OrganisationDetail = {
   country: string | null;
   phone: string | null;
   notes: string | null;
+  /** 30 / 45 / 60, or null for the house default. */
+  paymentTermsDays: number | null;
+  /** "publication" or "month_end", or null. */
+  paymentTermsBasis: string | null;
+  /** Where this supplier's Space Orders are sent; several addresses allowed. */
+  orderEmail: string | null;
   contacts: OrgContact[];
+  /** Space Orders bought from this supplier. */
+  orders: OrgOrder[];
   opportunities: OrgOpportunity[];
   campaigns: OrgCampaign[];
   invoices: OrgInvoice[];
