@@ -183,6 +183,42 @@ export default async function OrganisationPage({
       </section>
 
       <div className="cols">
+        {(org.is_supplier || org.orders.length > 0) && (
+          <section className="card">
+            <div className="card-head">
+              <h2>Space Orders</h2>
+              <span className="sub">
+                {org.orders.length} bought from them
+                {org.orderEmail ? ` · orders go to ${org.orderEmail}` : " · no order address yet"}
+              </span>
+            </div>
+            <div className="card-body">
+              {org.orders.length === 0 ? (
+                <p className="empty-note">Nothing booked with this supplier yet.</p>
+              ) : (
+                <div className="rows">
+                  {org.orders.map((o) => (
+                    <div className="row" key={o.id}>
+                      <div className="grow">
+                        <p>
+                          <Link href={`/space-orders/${o.id}`} style={{ color: "var(--blue)" }}>
+                            {o.number}
+                          </Link>{" "}
+                          · {o.client}
+                        </p>
+                        <small>
+                          {o.campaignRef} · {o.campaignName}
+                        </small>
+                      </div>
+                      <span className="num strong">{gbp(o.net)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         <section className="card">
           <div className="card-head">
             <h2>Invoices</h2>

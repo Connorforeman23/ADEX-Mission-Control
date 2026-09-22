@@ -19,6 +19,9 @@ export const blankOrganisation = (ownerId = ""): OrganisationInput => ({
   statusReason: "",
   companiesHouseNo: "",
   website: "",
+  paymentTermsDays: "",
+  paymentTermsBasis: "month_end",
+  orderEmail: "",
   addressLine1: "",
   addressLine2: "",
   city: "",
@@ -192,6 +195,49 @@ export default function OrganisationEditor({
             <input className="input" value={form.website} onChange={(e) => set("website", e.target.value)} />
           </label>
         </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <label className="field" style={{ flex: "1 1 150px" }}>
+            <span>Payment terms</span>
+            <select
+              className="input"
+              value={form.paymentTermsDays}
+              onChange={(e) => set("paymentTermsDays", e.target.value)}
+            >
+              <option value="">House default</option>
+              <option value="30">30 days</option>
+              <option value="45">45 days</option>
+              <option value="60">60 days</option>
+            </select>
+          </label>
+          <label className="field" style={{ flex: "1 1 180px" }}>
+            <span>Counted from</span>
+            <select
+              className="input"
+              value={form.paymentTermsBasis}
+              onChange={(e) => set("paymentTermsBasis", e.target.value)}
+              disabled={!form.paymentTermsDays}
+            >
+              <option value="month_end">End of month</option>
+              <option value="publication">Date of publication</option>
+            </select>
+          </label>
+        </div>
+        <small className="sub-line">
+          A client&rsquo;s terms set the due date on their invoices. The house default is invoice dated
+          month end, due on the 25th of the next.
+        </small>
+        {form.isSupplier && (
+          <label className="field">
+            <span>Space Orders go to</span>
+            <input
+              className="input"
+              value={form.orderEmail}
+              onChange={(e) => set("orderEmail", e.target.value)}
+              placeholder="bookings@supplier.co.uk — several addresses separated by commas"
+            />
+            <small className="sub-line">Lynsey and Steve are copied on every order automatically.</small>
+          </label>
+        )}
         <label className="field">
           <span>Companies House number</span>
           <input

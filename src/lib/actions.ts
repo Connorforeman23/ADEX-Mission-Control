@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { draftInvoiceLines, dueAfter, monthEnd } from "@/lib/invoice";
+import { draftInvoiceLines, dueDateFor, monthEnd } from "@/lib/invoice";
 import { parseSelectedDates } from "@/lib/dates";
 import type { Campaign } from "@/lib/money";
 
@@ -537,7 +537,8 @@ export async function generateClientInvoice(
   const { data: campaign } = await supabase
     .from("campaigns")
     .select(
-      `id, ref, name, fee, client_id, client_po,
+      `id, ref, name, fee, client_id, client_po, start_date,
+       clients ( name ),
        campaign_lines ( id, channel, vendor, publication, detail, line_type,
                         start_date, end_date, client_charge, supplier_gross, supplier_net )`
     )
@@ -546,6 +547,17 @@ export async function generateClientInvoice(
   if (!campaign) return { error: "Campaign not found." };
 
   const c = campaign as unknown as Campaign & { client_id: string | null; client_po: string | null };
+
+  // The client's payment terms decide the due date (decision A).
+  const { data: termsRow } = await supabase
+    .from("organisations")
+    .select("payment_terms_days, payment_terms_basis")
+    .ilike("name", c.clients?.name ?? "")
+    .maybeSingle();
+  const terms = {
+    days: (termsRow as { payment_terms_days: number | null } | null)?.payment_terms_days ?? null,
+    basis: (termsRow as { payment_terms_basis: string | null } | null)?.payment_terms_basis ?? null,
+  };
   const lines = edited
     ? edited
         .map((l) => ({
@@ -575,7 +587,7 @@ export async function generateClientInvoice(
       outstanding: amount,
       client_po: po,
       invoice_date: invoiceDate,
-      due_date: dueAfter(invoiceDate),
+      due_date: dueDateFor(invoiceDate, c.start_date ?? null, terms),
     })
     .select("id")
     .single();
@@ -1095,6 +1107,9 @@ export type OrganisationInput = {
   statusReason: string;
   companiesHouseNo: string;
   website: string;
+  paymentTermsDays: string;
+  paymentTermsBasis: string;
+  orderEmail: string;
   addressLine1: string;
   addressLine2: string;
   city: string;
@@ -1131,6 +1146,9 @@ export async function saveOrganisation(input: OrganisationInput) {
     is_supplier: input.isSupplier,
     companies_house_no: input.companiesHouseNo.trim() || null,
     website: normaliseWebsite(input.website),
+    payment_terms_days: input.paymentTermsDays ? Number(input.paymentTermsDays) : null,
+    payment_terms_basis: input.paymentTermsDays ? input.paymentTermsBasis || "month_end" : null,
+    order_email: input.orderEmail.trim() || null,
     address_line1: input.addressLine1.trim() || null,
     address_line2: input.addressLine2.trim() || null,
     city: input.city.trim() || null,

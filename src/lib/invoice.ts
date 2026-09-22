@@ -27,6 +27,8 @@ export type InvoiceLine = {
 
 export type ClientInvoice = {
   id: string;
+  /** The sentence at the foot: the client's own terms, or the house default. */
+  terms: string;
   invoiceNo: string | null;
   invoiceDate: string;
   dueDate: string | null;
@@ -52,10 +54,37 @@ export function monthEnd(iso: string) {
   return last.toISOString().slice(0, 10);
 }
 
-/** The 25th of the month after the invoice date. */
+/** The 25th of the month after the invoice date — the house default. */
 export function dueAfter(iso: string) {
   const d = new Date(iso + "T00:00:00");
   return new Date(d.getFullYear(), d.getMonth() + 1, 25).toISOString().slice(0, 10);
+}
+
+export type PaymentTerms = { days: number | null; basis: string | null };
+
+/**
+ * When an invoice falls due.
+ *
+ * A client with recorded terms — 30/45/60 days from the end of the month, or
+ * from the date of publication (the campaign's first day) — gets exactly that.
+ * A client with none keeps the house default: dated month end, due the 25th
+ * of the next. (Decision A, 16 Sept.)
+ */
+export function dueDateFor(invoiceDate: string, publicationDate: string | null, terms: PaymentTerms) {
+  if (!terms.days) return dueAfter(invoiceDate);
+  const addDays = (iso: string, n: number) => {
+    const d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  if (terms.basis === "publication" && publicationDate) return addDays(publicationDate, terms.days);
+  return addDays(monthEnd(invoiceDate), terms.days);
+}
+
+/** "30 days from end of month", for the foot of the invoice. */
+export function termsSentence(terms: PaymentTerms) {
+  if (!terms.days) return PAYMENT_TERMS;
+  return `Payment due within ${terms.days} days from ${terms.basis === "publication" ? "the date of publication" : "the end of the month"}.`;
 }
 
 /**

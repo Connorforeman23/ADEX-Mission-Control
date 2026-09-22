@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ADEX } from "@/lib/po";
 import { dateGB } from "@/lib/money";
-import { invoiceTotals, PAYMENT_TERMS, type ClientInvoice } from "@/lib/invoice";
+import { invoiceTotals, type ClientInvoice } from "@/lib/invoice";
 import { generateClientInvoice, saveClientInvoice } from "@/lib/actions";
 import { pushInvoiceToXero } from "@/lib/xero-actions";
 import { printAs } from "@/lib/print";
@@ -316,7 +316,7 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
 
         <div className="inv-terms">
           <p>All queries must be raised immediately with {ADEX.accountsEmail}.</p>
-          <p>{PAYMENT_TERMS}</p>
+          <p>{invoice.terms}</p>
         </div>
 
         <div className="inv-footer">

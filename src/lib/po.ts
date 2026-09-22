@@ -173,7 +173,20 @@ export type SpaceOrder = {
   total: number;
   /** Contacts already saved against this supplier, for the "To:" dropdown. */
   contacts: { id: string; name: string }[];
+  /** Where the supplier wants orders sent — from their organisation record. */
+  orderEmail: string;
+  /** The supplier's payment terms, printed on the order; "" if none recorded. */
+  paymentTerms: string;
 };
+
+/** Everyone copied on every Space Order that leaves the building. */
+export const ORDER_CC = ["Lynsey.tester@advertisingexcellence.co.uk", "Steve@advertisingexcellence.co.uk"];
+
+/** "30 days from end of month" — the terms as they read on a document. */
+export function termsLabel(days: number | null, basis: string | null) {
+  if (!days) return "";
+  return `${days} days from ${basis === "publication" ? "date of publication" : "end of month"}`;
+}
 
 /** 07.09.26 — the format the real Space Orders use. */
 export function poDate(iso: string | null | undefined) {

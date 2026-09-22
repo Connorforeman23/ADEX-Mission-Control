@@ -1,13 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { VAT_RATE, type Campaign } from "@/lib/money";
-import { spaceOrderRows, type SpaceOrder } from "@/lib/po";
+import { spaceOrderRows, termsLabel, type SpaceOrder } from "@/lib/po";
 import {
   draftInvoiceLines,
-  dueAfter,
+  dueDateFor,
   invoiceTotals,
   monthEnd,
+  termsSentence,
   type ClientInvoice,
   type InvoiceLine,
+  type PaymentTerms,
 } from "@/lib/invoice";
 // Row type lives in lib/organisations.ts (no server imports) so client
 // components can use it without pulling this module into the browser bundle.
@@ -326,14 +328,14 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
   const { data: org, error } = await supabase
     .from("organisations")
     .select(
-      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, owner_id, address_line1, address_line2, city, postcode, country, phone, notes, profiles ( full_name )"
+      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, owner_id, address_line1, address_line2, city, postcode, country, phone, notes, payment_terms_days, payment_terms_basis, order_email, profiles ( full_name )"
     )
     .eq("id", id)
     .maybeSingle();
 
   if (error || !org) return null;
 
-  const [contactsRes, oppsRes, campsRes, invRes, histRes, spendRes] = await Promise.all([
+  const [contactsRes, oppsRes, campsRes, invRes, histRes, spendRes, ordersRes] = await Promise.all([
     supabase
       .from("contacts")
       .select("id, first_name, last_name, job_title, email, phone")
@@ -360,6 +362,11 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
       .eq("organisation_id", id)
       .order("changed_at", { ascending: false }),
     supabase.from("campaign_lines").select("supplier_net").eq("supplier_org_id", id),
+    // Space Orders bought from this supplier, newest campaign first.
+    supabase
+      .from("space_orders")
+      .select("id, order_number, campaigns ( ref, name, start_date, clients ( name ) ), campaign_lines ( supplier_net )")
+      .eq("supplier_org_id", id),
   ]);
 
   type OrgRaw = { profiles: { full_name: string } | null } & Record<string, unknown>;
@@ -383,6 +390,27 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
     country: (o.country as string | null) ?? null,
     phone: (o.phone as string | null) ?? null,
     notes: (o.notes as string | null) ?? null,
+    paymentTermsDays: (o.payment_terms_days as number | null) ?? null,
+    paymentTermsBasis: (o.payment_terms_basis as string | null) ?? null,
+    orderEmail: (o.order_email as string | null) ?? null,
+
+    orders: ((ordersRes.data ?? []) as unknown as {
+      id: string;
+      order_number: string | null;
+      campaigns: { ref: string; name: string; start_date: string | null; clients: { name: string } | null } | null;
+      campaign_lines: { supplier_net: number }[];
+    }[])
+      .map((r) => ({
+        id: r.id,
+        number: r.order_number ?? "—",
+        campaignRef: r.campaigns?.ref ?? "—",
+        campaignName: r.campaigns?.name ?? "",
+        client: r.campaigns?.clients?.name ?? "—",
+        start: r.campaigns?.start_date ?? "",
+        net: r.campaign_lines.reduce((a, l) => a + Number(l.supplier_net), 0),
+      }))
+      .sort((a, b) => b.start.localeCompare(a.start))
+      .map(({ start: _start, ...rest }) => rest),
 
     contacts: ((contactsRes.data ?? []) as unknown as {
       id: string; first_name: string; last_name: string | null;
@@ -557,15 +585,31 @@ export async function getSpaceOrder(orderId: string): Promise<SpaceOrder | null>
   ))];
 
   let contacts: { id: string; name: string }[] = [];
+  let orderEmail = "";
+  let paymentTerms = "";
   if (o.supplier_org_id) {
-    const { data: people } = await supabase
-      .from("contacts")
-      .select("id, first_name, last_name")
-      .eq("organisation_id", o.supplier_org_id)
-      .order("first_name");
+    const [{ data: people }, { data: supplierOrg }] = await Promise.all([
+      supabase
+        .from("contacts")
+        .select("id, first_name, last_name")
+        .eq("organisation_id", o.supplier_org_id)
+        .order("first_name"),
+      supabase
+        .from("organisations")
+        .select("order_email, payment_terms_days, payment_terms_basis")
+        .eq("id", o.supplier_org_id)
+        .maybeSingle(),
+    ]);
     contacts = ((people ?? []) as { id: string; first_name: string; last_name: string | null }[]).map(
       (p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(" ") })
     );
+    const so = (supplierOrg ?? null) as {
+      order_email: string | null;
+      payment_terms_days: number | null;
+      payment_terms_basis: string | null;
+    } | null;
+    orderEmail = so?.order_email ?? "";
+    paymentTerms = termsLabel(so?.payment_terms_days ?? null, so?.payment_terms_basis ?? null);
   }
 
   return {
@@ -590,6 +634,8 @@ export async function getSpaceOrder(orderId: string): Promise<SpaceOrder | null>
     vat,
     total: net + vat,
     contacts,
+    orderEmail,
+    paymentTerms,
   };
 }
 
@@ -639,13 +685,14 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
   const inv = invoice as unknown as InvoiceRaw;
   const client = inv.campaigns?.clients?.name ?? "—";
 
-  const [{ data: lineData }, clientAddress] = await Promise.all([
+  const [{ data: lineData }, clientAddress, terms] = await Promise.all([
     supabase
       .from("client_invoice_lines")
       .select("id, campaign_line_id, description, net")
       .eq("invoice_id", invoiceId)
       .order("sort_order"),
     clientAddressFor(supabase, client),
+    clientTermsFor(supabase, client),
   ]);
 
   type LineRaw = {
@@ -665,6 +712,7 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
 
   return {
     id: inv.id,
+    terms: termsSentence(terms),
     invoiceNo: inv.invoice_no,
     invoiceDate: inv.invoice_date,
     dueDate: inv.due_date,
@@ -681,6 +729,20 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
     vat,
     total,
   };
+}
+
+/** The client's payment terms, from their organisation record — matched by name. */
+async function clientTermsFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  client: string
+): Promise<PaymentTerms> {
+  const { data } = await supabase
+    .from("organisations")
+    .select("payment_terms_days, payment_terms_basis")
+    .ilike("name", client)
+    .maybeSingle();
+  const t = (data ?? null) as { payment_terms_days: number | null; payment_terms_basis: string | null } | null;
+  return { days: t?.payment_terms_days ?? null, basis: t?.payment_terms_basis ?? null };
 }
 
 /** The client's address block, from their organisation record — matched by name. */
@@ -736,16 +798,20 @@ export async function getInvoicePreview(campaignId: string): Promise<ClientInvoi
   const c = campaign as unknown as Campaign & { client_po: string | null };
   const client = c.clients?.name ?? "—";
   const lines = draftInvoiceLines(c);
-  const clientAddress = await clientAddressFor(supabase, client);
+  const [clientAddress, terms] = await Promise.all([
+    clientAddressFor(supabase, client),
+    clientTermsFor(supabase, client),
+  ]);
 
   const invoiceDate = monthEnd(new Date().toISOString().slice(0, 10));
   const { net, vat, total } = invoiceTotals(lines);
 
   return {
     id: "",
+    terms: termsSentence(terms),
     invoiceNo: null,
     invoiceDate,
-    dueDate: dueAfter(invoiceDate),
+    dueDate: dueDateFor(invoiceDate, c.start_date ?? null, terms),
     status: "Draft",
     xeroId: null,
     clientPo: c.client_po,
