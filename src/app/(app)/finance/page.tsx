@@ -20,6 +20,7 @@ import { buildPurchaseOrders, reconcile, type SupplierInvoice } from "@/lib/po";
 import PoTable from "@/components/PoTable";
 import ClientInvoices, { type InvoiceRow, type InvoiceableCampaign } from "@/components/ClientInvoices";
 import BarList, { type BarRow } from "@/components/BarList";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export const dynamic = "force-dynamic";
 
@@ -148,21 +149,13 @@ export default async function FinancePage() {
       </div>
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Billings by channel</h2>
-            <span className="sub">Client charge, ex VAT</span>
-          </div>
+        <CollapsibleCard id="finance-channels" title="Billings by channel" sub="Client charge, ex VAT">
           <div className="card-body">
             <BarList rows={channelRows} empty="No booking lines yet." />
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Campaign ledger</h2>
-            <span className="sub">Profit = client gross − supplier net</span>
-          </div>
+        <CollapsibleCard id="finance-ledger" title="Campaign ledger" sub="Profit = client gross − supplier net">
           <div className="card-body" style={{ padding: 0 }}>
             {campaigns.length === 0 ? (
               <p className="empty-note" style={{ padding: "18px 16px" }}>
@@ -216,7 +209,7 @@ export default async function FinancePage() {
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
       <PoTable
