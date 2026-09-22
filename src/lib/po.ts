@@ -180,7 +180,7 @@ export type SpaceOrder = {
 };
 
 /** Everyone copied on every Space Order that leaves the building. */
-export const ORDER_CC = ["Lynsey.tester@advertisingexcellence.co.uk", "Steve@advertisingexcellence.co.uk"];
+export const ORDER_CC = ["Lynsey.tester@advertisingexcellence.co.uk", "Steve.foreman@advertisingexcellence.co.uk"];
 
 /** "30 days from end of month" — the terms as they read on a document. */
 export function termsLabel(days: number | null, basis: string | null) {
