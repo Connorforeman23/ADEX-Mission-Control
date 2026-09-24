@@ -402,17 +402,17 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
       campaigns: { ref: string; name: string; start_date: string | null; clients: { name: string } | null } | null;
       campaign_lines: { supplier_net: number }[];
     }[])
+      // Newest campaign first — sorted on the raw start date before it is
+      // dropped, since the order rows themselves carry no date.
+      .sort((a, b) => (b.campaigns?.start_date ?? "").localeCompare(a.campaigns?.start_date ?? ""))
       .map((r) => ({
         id: r.id,
         number: r.order_number ?? "—",
         campaignRef: r.campaigns?.ref ?? "—",
         campaignName: r.campaigns?.name ?? "",
         client: r.campaigns?.clients?.name ?? "—",
-        start: r.campaigns?.start_date ?? "",
         net: r.campaign_lines.reduce((a, l) => a + Number(l.supplier_net), 0),
-      }))
-      .sort((a, b) => b.start.localeCompare(a.start))
-      .map(({ start: _start, ...rest }) => rest),
+      })),
 
     contacts: ((contactsRes.data ?? []) as unknown as {
       id: string; first_name: string; last_name: string | null;
