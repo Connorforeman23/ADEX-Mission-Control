@@ -11,7 +11,9 @@ import {
   rangeGB,
   STATUS_LABEL,
 } from "@/lib/money";
-import BarList, { type BarRow } from "@/components/BarList";
+import { createClient } from "@/lib/supabase/server";
+import type { BarRow } from "@/components/BarList";
+import SpendReports, { type SpendCampaign } from "@/components/SpendReports";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,22 @@ export default async function ReportsPage() {
     colour: CHANNEL_COLOUR[ch],
     value: channelSpend.get(ch) ?? 0,
   })).filter((r) => r.value > 0);
+
+  // Which campaigns have a client invoice — the "Invoiced" toggle.
+  const supabase = await createClient();
+  const { data: invoiced } = await supabase.from("client_invoices").select("campaign_id");
+  const invoicedIds = new Set(
+    ((invoiced ?? []) as { campaign_id: string | null }[]).map((i) => i.campaign_id).filter(Boolean)
+  );
+  const spendCampaigns: SpendCampaign[] = campaigns.map((c) => ({
+    id: c.id,
+    client: c.clients?.name ?? "Unassigned",
+    owner: c.profiles?.full_name ?? "Unassigned",
+    start: c.start_date ?? "",
+    status: c.status,
+    invoiced: invoicedIds.has(c.id),
+    lines: c.campaign_lines.map((l) => ({ channel: l.channel, amount: Number(l.client_charge) })),
+  }));
 
   const best = [...withResponse].sort((a, b) => Number(a.cpl) - Number(b.cpl)).slice(0, 8);
 
@@ -84,17 +102,9 @@ export default async function ReportsPage() {
         </div>
       </div>
 
-      <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Spend by channel</h2>
-            <span className="sub">Client charge, ex VAT</span>
-          </div>
-          <div className="card-body">
-            <BarList rows={spendRows} empty="No booking lines yet." />
-          </div>
-        </section>
+      <SpendReports campaigns={spendCampaigns} today={new Date().toISOString().slice(0, 10)} />
 
+      <div className="cols">
         <section className="card">
           <div className="card-head">
             <h2>Channel performance</h2>

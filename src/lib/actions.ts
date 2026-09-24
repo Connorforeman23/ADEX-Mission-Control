@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { draftInvoiceLines, dueAfter, monthEnd } from "@/lib/invoice";
+import { draftInvoiceLines, dueDateFor, monthEnd } from "@/lib/invoice";
+import { parseSelectedDates } from "@/lib/dates";
 import type { Campaign } from "@/lib/money";
 
 export type LineInput = {
@@ -23,6 +24,9 @@ export type LineInput = {
   urn: string;
   supplier_gross: string;
   client_charge: string;
+  /** Blank = the default (15% media, 0% production). A number overrides it —
+   *  the GW deal at 10%, a house rate on a one-off. */
+  commission_pct: string;
 };
 
 export type CampaignInput = {
@@ -102,6 +106,14 @@ export async function createCampaign(input: CampaignInput) {
   for (const l of lines) {
     if (!l.start_date || !l.end_date) return { error: `Add dates to the ${l.vendor} line.` };
     if (l.end_date < l.start_date) return { error: `The ${l.vendor} line ends before it starts.` };
+    // Selected dates: any readable format in, checked against the line, ISO out.
+    const picked = parseSelectedDates(l.selected_dates, l.start_date, l.end_date);
+    if (!picked.ok) return { error: `${l.vendor} line — ${picked.error}` };
+    l.selected_dates = picked.normalised;
+    const pct = l.commission_pct.trim();
+    if (pct && (Number.isNaN(Number(pct)) || Number(pct) < 0 || Number(pct) > 100)) {
+      return { error: `${l.vendor} line — commission must be a percentage between 0 and 100.` };
+    }
   }
 
   // New copy needs a creative deadline so the studio follow-up can be raised.
@@ -182,6 +194,7 @@ export async function createCampaign(input: CampaignInput) {
       channel: l.channel,
       line_type: l.line_type,
       vendor: l.vendor.trim(),
+      publication: l.publication.trim() || null,
       detail: l.detail.trim() || null,
       start_date: l.start_date,
       end_date: l.end_date,
@@ -192,7 +205,7 @@ export async function createCampaign(input: CampaignInput) {
       copy_instruction: l.copy_instruction,
       urn: l.copy_instruction === "URN" ? l.urn.trim() || null : null,
       supplier_gross: money(l.supplier_gross),
-      commission_pct: l.line_type === "production" ? 0 : 15,
+      commission_pct: commissionFor(l),
       client_charge: money(l.client_charge) || money(l.supplier_gross),
     });
     if (error) {
@@ -257,6 +270,24 @@ export async function createCampaign(input: CampaignInput) {
   return { ref: campaign.ref, id: campaign.id };
 }
 
+/** "https://www.Randox.com/" and "randox.com" are the same site. */
+function normaliseWebsite(v: string) {
+  const w = v
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/+$/, "");
+  return w || null;
+}
+
+/** The line's commission: an override if one was typed, else the default. */
+function commissionFor(l: LineInput) {
+  const pct = l.commission_pct.trim();
+  if (pct !== "") return Number(pct);
+  return l.line_type === "production" ? 0 : 15;
+}
+
 /** Shared shape for a booking line row, minus the campaign it belongs to. */
 function lineRow(l: LineInput) {
   return {
@@ -274,7 +305,7 @@ function lineRow(l: LineInput) {
     copy_instruction: l.copy_instruction,
     urn: l.copy_instruction === "URN" ? l.urn.trim() || null : null,
     supplier_gross: money(l.supplier_gross),
-    commission_pct: l.line_type === "production" ? 0 : 15,
+    commission_pct: commissionFor(l),
     client_charge: money(l.client_charge) || money(l.supplier_gross),
   };
 }
@@ -299,6 +330,14 @@ export async function updateCampaign(campaignId: string, input: CampaignInput) {
   for (const l of lines) {
     if (!l.start_date || !l.end_date) return { error: `Add dates to the ${l.vendor} line.` };
     if (l.end_date < l.start_date) return { error: `The ${l.vendor} line ends before it starts.` };
+    // Selected dates: any readable format in, checked against the line, ISO out.
+    const picked = parseSelectedDates(l.selected_dates, l.start_date, l.end_date);
+    if (!picked.ok) return { error: `${l.vendor} line — ${picked.error}` };
+    l.selected_dates = picked.normalised;
+    const pct = l.commission_pct.trim();
+    if (pct && (Number.isNaN(Number(pct)) || Number(pct) < 0 || Number(pct) > 100)) {
+      return { error: `${l.vendor} line — commission must be a percentage between 0 and 100.` };
+    }
   }
 
   const { data: existingClient } = await supabase
@@ -422,6 +461,8 @@ export type TaskInput = {
   assigneeId: string;
   campaignId?: string;
   clientId?: string;
+  /** Any organisation — client or supplier. Replaces clientId for new tasks. */
+  organisationId?: string;
   leadId?: string;
 };
 
@@ -440,6 +481,7 @@ export async function saveTask(input: TaskInput) {
     assignee_id: input.assigneeId || null,
     campaign_id: input.campaignId || null,
     client_id: input.clientId || null,
+    organisation_id: input.organisationId || null,
     lead_id: input.leadId || null,
     created_by: user.id,
   };
@@ -495,7 +537,8 @@ export async function generateClientInvoice(
   const { data: campaign } = await supabase
     .from("campaigns")
     .select(
-      `id, ref, name, fee, client_id, client_po,
+      `id, ref, name, fee, client_id, client_po, start_date,
+       clients ( name ),
        campaign_lines ( id, channel, vendor, publication, detail, line_type,
                         start_date, end_date, client_charge, supplier_gross, supplier_net )`
     )
@@ -504,6 +547,17 @@ export async function generateClientInvoice(
   if (!campaign) return { error: "Campaign not found." };
 
   const c = campaign as unknown as Campaign & { client_id: string | null; client_po: string | null };
+
+  // The client's payment terms decide the due date (decision A).
+  const { data: termsRow } = await supabase
+    .from("organisations")
+    .select("payment_terms_days, payment_terms_basis")
+    .ilike("name", c.clients?.name ?? "")
+    .maybeSingle();
+  const terms = {
+    days: (termsRow as { payment_terms_days: number | null } | null)?.payment_terms_days ?? null,
+    basis: (termsRow as { payment_terms_basis: string | null } | null)?.payment_terms_basis ?? null,
+  };
   const lines = edited
     ? edited
         .map((l) => ({
@@ -533,7 +587,7 @@ export async function generateClientInvoice(
       outstanding: amount,
       client_po: po,
       invoice_date: invoiceDate,
-      due_date: dueAfter(invoiceDate),
+      due_date: dueDateFor(invoiceDate, c.start_date ?? null, terms),
     })
     .select("id")
     .single();
@@ -1053,6 +1107,9 @@ export type OrganisationInput = {
   statusReason: string;
   companiesHouseNo: string;
   website: string;
+  paymentTermsDays: string;
+  paymentTermsBasis: string;
+  orderEmail: string;
   addressLine1: string;
   addressLine2: string;
   city: string;
@@ -1088,7 +1145,10 @@ export async function saveOrganisation(input: OrganisationInput) {
     owner_id: ownerFor(role, user.id, input.ownerId),
     is_supplier: input.isSupplier,
     companies_house_no: input.companiesHouseNo.trim() || null,
-    website: input.website.trim() || null,
+    website: normaliseWebsite(input.website),
+    payment_terms_days: input.paymentTermsDays ? Number(input.paymentTermsDays) : null,
+    payment_terms_basis: input.paymentTermsDays ? input.paymentTermsBasis || "month_end" : null,
+    order_email: input.orderEmail.trim() || null,
     address_line1: input.addressLine1.trim() || null,
     address_line2: input.addressLine2.trim() || null,
     city: input.city.trim() || null,
@@ -1101,9 +1161,16 @@ export async function saveOrganisation(input: OrganisationInput) {
 
   let id = input.id;
 
+  // Website is unique (0017): two companies with the same site are one
+  // company entered twice. Say so in plain words rather than a constraint name.
+  const duplicateSite = (message: string) =>
+    /organisations_website_unique/.test(message)
+      ? `Another organisation already has the website ${row.website}. Search for it rather than creating a duplicate.`
+      : message;
+
   if (id) {
     const { error } = await supabase.from("organisations").update(row).eq("id", id);
-    if (error) return { error: error.message };
+    if (error) return { error: duplicateSite(error.message) };
   } else {
     const { data, error } = await supabase
       .from("organisations")
@@ -1112,9 +1179,11 @@ export async function saveOrganisation(input: OrganisationInput) {
       .single();
     if (error) {
       return {
-        error: /duplicate|unique/i.test(error.message)
-          ? `An organisation called "${name}" already exists.`
-          : error.message,
+        error: /organisations_website_unique/.test(error.message)
+          ? duplicateSite(error.message)
+          : /duplicate|unique/i.test(error.message)
+            ? `An organisation called "${name}" already exists.`
+            : error.message,
       };
     }
     id = data.id as string;

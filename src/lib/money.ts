@@ -24,6 +24,8 @@ export type CampaignLine = {
   end_date: string;
   supplier_gross: number;
   supplier_net: number;
+  /** Commission on this line; 15 on media and 0 on production unless overridden. */
+  commission_pct?: number | null;
   /** Media buys the space; production is the physical cost of the poster or audio. */
   line_type?: "media" | "production";
   client_charge: number;
@@ -40,6 +42,10 @@ export type CampaignLine = {
 };
 
 export type Campaign = {
+  /** When the campaign was created — a won deal opens one, so this is "won". */
+  created_at?: string | null;
+  /** The sales owner's user id — what "mine" is matched on, never the name. */
+  owner_id?: string | null;
   id: string;
   ref: string;
   name: string;
@@ -94,6 +100,16 @@ export const productionSpend = (c: Campaign) =>
 /** The 15% commission element of profit, separate from any markup. */
 export const commissionOf = (c: Campaign) => supplierGross(c) - supplierNet(c);
 
+/**
+ * What the sales owner earns on a campaign: 15% of the profit.
+ *
+ * NOT to be confused with agency commission above — that is 15% off the
+ * supplier's rate card and is how ADEX makes money. This is 15% of what ADEX
+ * made, and is how the rep is paid. Two different 15%s; keep the names apart.
+ */
+export const REP_COMMISSION_PCT = 15;
+export const repCommission = (c: Campaign) => (dealProfit(c) * REP_COMMISSION_PCT) / 100;
+
 /** Profit earned by charging above supplier gross. */
 export const markupOf = (c: Campaign) =>
   sum(c.campaign_lines.map((l) => Number(l.client_charge) - Number(l.supplier_gross)));
@@ -104,8 +120,23 @@ export const vatOn = (exVat: number) => Math.round(exVat * VAT_RATE);
 
 export const gbp = (n: number) => "£" + Math.round(n).toLocaleString("en-GB");
 
-export const gbpK = (n: number) =>
-  n >= 1000 ? "£" + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : "£" + Math.round(n);
+/**
+ * A figure at a glance: £940, £9.4k, £94k, £1.1m.
+ *
+ * Millions get their own unit — "£1000k" is not how anyone says it.
+ * One decimal below ten of a unit, none above, so the width stays steady.
+ */
+export const gbpK = (n: number) => {
+  const sign = n < 0 ? "-" : "";
+  const v = Math.abs(n);
+  // Up to two decimals, but no trailing zeros: £1.15m, £1.1m, £1m — never
+  // "£1.00m", which reads as precision that isn't there.
+  const trim = (x: number, dp: number) => x.toFixed(dp).replace(/\.?0+$/, "");
+  // 999,999 rounds to 1000k, which nobody says — so it crosses to millions too.
+  if (v >= 999_500) return `${sign}£${trim(v / 1_000_000, 2)}m`;
+  if (v >= 1000) return `${sign}£${trim(v / 1000, v >= 10_000 ? 0 : 1)}k`;
+  return `${sign}£${Math.round(v)}`;
+};
 
 // --- dates -------------------------------------------------------------
 // Postgres hands back ISO (2026-08-03); everything shown to the team is

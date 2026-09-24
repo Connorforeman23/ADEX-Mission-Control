@@ -22,6 +22,7 @@ import {
   type Campaign,
 } from "@/lib/money";
 import { CAMPAIGN_STATUSES } from "@/lib/reference";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
 import FollowUp from "@/components/FollowUp";
@@ -44,10 +45,13 @@ export default function CampaignTable({
   openId,
   canBook = true,
   prefillClient = "",
+  documents = {},
 }: {
   campaigns: Campaign[];
   clients: { id: string; name: string }[];
   staffList: { id: string; full_name: string }[];
+  /** Space Orders and invoices per campaign id — the drawer links to them. */
+  documents?: Record<string, CampaignDocuments>;
   openNew?: boolean;
   /** Campaign id to open in the detail panel on arrival (dashboard click-through). */
   openId?: string;
@@ -126,6 +130,12 @@ export default function CampaignTable({
         urn: l.urn ?? "",
         supplier_gross: String(l.supplier_gross ?? ""),
         client_charge: String(l.client_charge ?? ""),
+        // Show the override only if one was set; a default stays blank so it
+        // keeps following the default if the line type changes.
+        commission_pct:
+          l.commission_pct == null || Number(l.commission_pct) === (l.line_type === "production" ? 0 : 15)
+            ? ""
+            : String(l.commission_pct),
       })),
     };
   }
@@ -437,6 +447,7 @@ export default function CampaignTable({
           <CampaignDetail
             c={detail}
             staff={staffList}
+            documents={documents[detail.id]}
             onEdit={() => {
               const d = detail;
               setDetail(null);
@@ -465,13 +476,20 @@ export default function CampaignTable({
   );
 }
 
+export type CampaignDocuments = {
+  orders: { id: string; number: string; supplier: string }[];
+  invoices: { id: string; number: string | null; status: string }[];
+};
+
 function CampaignDetail({
   c,
   staff,
+  documents,
   onEdit,
 }: {
   c: Campaign;
   staff: { id: string; full_name: string }[];
+  documents?: CampaignDocuments;
   onEdit: () => void;
 }) {
   const gross = clientGross(c);
@@ -636,6 +654,34 @@ function CampaignDetail({
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* The paperwork this campaign produced — one click from the campaign
+          to its orders and invoices (Rick). */}
+      <div>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>
+          Documents
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {documents?.orders.map((o) => (
+            <Link key={o.id} className="btn" href={`/space-orders/${o.id}`}>
+              Space Order {o.number} · {o.supplier}
+            </Link>
+          ))}
+          {documents?.invoices.map((i) => (
+            <Link key={i.id} className="btn" href={`/invoices/${i.id}`}>
+              Invoice {i.number ?? "draft"} · {i.status}
+            </Link>
+          ))}
+          {!documents?.invoices.length && (
+            <Link className="btn" href={`/invoices/preview/${c.id}`}>
+              Preview invoice
+            </Link>
+          )}
+          {!documents?.orders.length && !documents?.invoices.length && (
+            <span className="sub-line">No Space Orders yet — they are created when the campaign is saved.</span>
+          )}
         </div>
       </div>
 

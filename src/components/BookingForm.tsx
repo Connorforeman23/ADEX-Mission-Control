@@ -29,6 +29,7 @@ const blankLine = (): LineInput => ({
   urn: "",
   supplier_gross: "",
   client_charge: "",
+  commission_pct: "",
 });
 
 const num = (v: string) => {
@@ -36,10 +37,14 @@ const num = (v: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// Supplier net is gross less 15% commission. Production — printing posters,
-// pressing audio — is billed at cost and carries none.
-const netOf = (l: LineInput) =>
-  l.line_type === "production" ? num(l.supplier_gross) : Math.round(num(l.supplier_gross) * 0.85);
+// Supplier net is gross less commission: 15% on media, none on production —
+// printing posters, pressing audio — unless the line says otherwise.
+export const commissionOf = (l: LineInput) => {
+  const pct = l.commission_pct?.trim();
+  if (pct !== undefined && pct !== "" && !Number.isNaN(Number(pct))) return Number(pct);
+  return l.line_type === "production" ? 0 : 15;
+};
+const netOf = (l: LineInput) => Math.round(num(l.supplier_gross) * (1 - commissionOf(l) / 100));
 
 export type EditingCampaign = {
   id: string;
@@ -236,7 +241,7 @@ export default function BookingForm({
                     }
                   >
                     <option value="media">Media</option>
-                    <option value="production">Production (no commission)</option>
+                    <option value="production">Production</option>
                   </select>
                 </label>
                 <label className="field">
@@ -280,7 +285,26 @@ export default function BookingForm({
                 </label>
                 <label className="field wide">
                   <span>Selected dates (optional)</span>
-                  <input className="input" value={l.selected_dates} onChange={(e) => updateLine(i, { selected_dates: e.target.value })} placeholder="e.g. 13 Jul, 20 Jul, 27 Jul only" />
+                  <input
+                    className="input"
+                    value={l.selected_dates}
+                    onChange={(e) => updateLine(i, { selected_dates: e.target.value })}
+                    placeholder="Specific days only — e.g. 13 Jul, 20 Jul, 27 Jul or 13.07.26, 20.07.26"
+                  />
+                  <small className="sub-line" style={{ marginTop: 4 }}>
+                    Leave blank if the line runs the whole date range. Any date format works; each
+                    date is checked against the start and end when you save.
+                  </small>
+                </label>
+                <label className="field">
+                  <span>Commission %</span>
+                  <input
+                    className="input num"
+                    value={l.commission_pct ?? ""}
+                    onChange={(e) => updateLine(i, { commission_pct: e.target.value })}
+                    placeholder={l.line_type === "production" ? "0 (default)" : "15 (default)"}
+                    inputMode="decimal"
+                  />
                 </label>
 
                 {l.channel === "OOH" && (
