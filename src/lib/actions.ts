@@ -1367,3 +1367,122 @@ async function syncSpaceOrders(
     }
   }
 }
+
+/**
+ * Copy a campaign into a new month.
+ *
+ * Repeat business is the normal case — the same client, the same publications,
+ * the same prices, a month later. Re-keying it is where mistakes come from.
+ *
+ * Every date shifts by the same number of days, so the shape of the booking is
+ * preserved: nine Saturdays stay nine Saturdays, a fortnight stays a fortnight.
+ * The copy arrives as PLANNING, not booked, because a repeat still has to be
+ * agreed — and it takes its own reference and its own Space Orders.
+ */
+export async function copyCampaign(
+  campaignId: string,
+  newStartDate: string,
+  creativeDeadline = ""
+) {
+  const supabase = await createClient();
+
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select(
+      `id, name, region, fee, note, client_po, start_date, owner_id,
+       clients ( name ),
+       campaign_lines ( line_type, channel, vendor, publication, detail, start_date, end_date,
+                        selected_dates, cpt, ooh_format, ooh_disp_type, copy_instruction, urn,
+                        supplier_gross, client_charge, commission_pct )`
+    )
+    .eq("id", campaignId)
+    .maybeSingle();
+  if (!campaign) return { error: "Campaign not found." };
+
+  type Raw = {
+    name: string;
+    region: string;
+    fee: number;
+    note: string | null;
+    client_po: string | null;
+    start_date: string | null;
+    owner_id: string | null;
+    clients: { name: string } | null;
+    campaign_lines: {
+      line_type: string | null;
+      channel: string;
+      vendor: string;
+      publication: string | null;
+      detail: string | null;
+      start_date: string;
+      end_date: string;
+      selected_dates: string | null;
+      cpt: number | null;
+      ooh_format: string | null;
+      ooh_disp_type: string | null;
+      copy_instruction: string | null;
+      urn: string | null;
+      supplier_gross: number;
+      client_charge: number;
+      commission_pct: number | null;
+    }[];
+  };
+  const c = campaign as unknown as Raw;
+  if (!c.campaign_lines.length) return { error: "That campaign has no booking lines to copy." };
+
+  // Shift everything by the gap between the old first day and the new one.
+  const oldStart = c.start_date ?? c.campaign_lines.map((l) => l.start_date).sort()[0];
+  if (!oldStart) return { error: "That campaign has no start date, so there is nothing to shift from." };
+  const dayMs = 86_400_000;
+  const offset = Math.round(
+    (new Date(newStartDate + "T00:00:00").getTime() - new Date(oldStart + "T00:00:00").getTime()) / dayMs
+  );
+  const shift = (iso: string) =>
+    new Date(new Date(iso + "T00:00:00").getTime() + offset * dayMs).toISOString().slice(0, 10);
+
+  const lines: LineInput[] = c.campaign_lines.map((l) => ({
+    line_type: (l.line_type === "production" ? "production" : "media") as "media" | "production",
+    channel: l.channel,
+    vendor: l.vendor,
+    publication: l.publication ?? "",
+    detail: l.detail ?? "",
+    start_date: shift(l.start_date),
+    end_date: shift(l.end_date),
+    // Selected dates are stored as ISO, so they shift the same way.
+    selected_dates: (l.selected_dates ?? "")
+      .split(/[,;\n]+/)
+      .map((d) => d.trim())
+      .filter(Boolean)
+      .map((d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? shift(d) : d))
+      .join(", "),
+    cpt: l.cpt != null ? String(l.cpt) : "",
+    ooh_format: l.ooh_format ?? "6 Sheet",
+    ooh_disp_type: l.ooh_disp_type ?? "Static",
+    copy_instruction: l.copy_instruction ?? "New Copy",
+    urn: l.urn ?? "",
+    supplier_gross: String(l.supplier_gross ?? ""),
+    client_charge: String(l.client_charge ?? ""),
+    commission_pct: l.commission_pct == null ? "" : String(l.commission_pct),
+  }));
+
+  const month = new Date(newStartDate + "T00:00:00").toLocaleDateString("en-GB", {
+    month: "long",
+    year: "numeric",
+  });
+
+  return createCampaign({
+    // The month is in the name so two copies of one campaign can be told apart.
+    name: `${c.name} — ${month}`,
+    clientName: c.clients?.name ?? "",
+    ownerId: c.owner_id ?? "",
+    status: "planning",
+    region: c.region,
+    fee: String(c.fee ?? 0),
+    note: c.note ?? "",
+    // Their PO is per booking — the new one will have its own.
+    clientPo: "",
+    creativeDeadline,
+    designSource: "inhouse",
+    lines,
+  });
+}
