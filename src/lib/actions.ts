@@ -104,12 +104,21 @@ export async function createCampaign(input: CampaignInput) {
   if (!lines.length) return { error: "Add at least one booking line with a supplier and a value." };
 
   for (const l of lines) {
-    if (!l.start_date || !l.end_date) return { error: `Add dates to the ${l.vendor} line.` };
-    if (l.end_date < l.start_date) return { error: `The ${l.vendor} line ends before it starts.` };
-    // Selected dates: any readable format in, checked against the line, ISO out.
+    // A line needs EITHER a date range OR specific dates, not both (Rick).
+    // Any readable format in, checked, ISO out.
     const picked = parseSelectedDates(l.selected_dates, l.start_date, l.end_date);
     if (!picked.ok) return { error: `${l.vendor} line — ${picked.error}` };
     l.selected_dates = picked.normalised;
+
+    if (!l.start_date || !l.end_date) {
+      // No range given: the specific dates ARE the range, first to last.
+      if (!picked.dates.length) {
+        return { error: `Add dates to the ${l.vendor} line — either a start and end, or the specific dates.` };
+      }
+      l.start_date = picked.dates[0];
+      l.end_date = picked.dates[picked.dates.length - 1];
+    }
+    if (l.end_date < l.start_date) return { error: `The ${l.vendor} line ends before it starts.` };
     const pct = l.commission_pct.trim();
     if (pct && (Number.isNaN(Number(pct)) || Number(pct) < 0 || Number(pct) > 100)) {
       return { error: `${l.vendor} line — commission must be a percentage between 0 and 100.` };
@@ -328,12 +337,21 @@ export async function updateCampaign(campaignId: string, input: CampaignInput) {
   if (!lines.length) return { error: "Keep at least one booking line." };
 
   for (const l of lines) {
-    if (!l.start_date || !l.end_date) return { error: `Add dates to the ${l.vendor} line.` };
-    if (l.end_date < l.start_date) return { error: `The ${l.vendor} line ends before it starts.` };
-    // Selected dates: any readable format in, checked against the line, ISO out.
+    // A line needs EITHER a date range OR specific dates, not both (Rick).
+    // Any readable format in, checked, ISO out.
     const picked = parseSelectedDates(l.selected_dates, l.start_date, l.end_date);
     if (!picked.ok) return { error: `${l.vendor} line — ${picked.error}` };
     l.selected_dates = picked.normalised;
+
+    if (!l.start_date || !l.end_date) {
+      // No range given: the specific dates ARE the range, first to last.
+      if (!picked.dates.length) {
+        return { error: `Add dates to the ${l.vendor} line — either a start and end, or the specific dates.` };
+      }
+      l.start_date = picked.dates[0];
+      l.end_date = picked.dates[picked.dates.length - 1];
+    }
+    if (l.end_date < l.start_date) return { error: `The ${l.vendor} line ends before it starts.` };
     const pct = l.commission_pct.trim();
     if (pct && (Number.isNaN(Number(pct)) || Number(pct) < 0 || Number(pct) > 100)) {
       return { error: `${l.vendor} line — commission must be a percentage between 0 and 100.` };
@@ -458,6 +476,8 @@ export type TaskInput = {
   title: string;
   notes: string;
   dueDate: string;
+  /** Optional "10:30" — a task with an hour becomes a calendar entry later. */
+  dueTime: string;
   assigneeId: string;
   campaignId?: string;
   clientId?: string;
@@ -478,6 +498,7 @@ export async function saveTask(input: TaskInput) {
     title: input.title.trim(),
     notes: input.notes.trim() || null,
     due_date: input.dueDate || null,
+    due_time: input.dueTime || null,
     assignee_id: input.assigneeId || null,
     campaign_id: input.campaignId || null,
     client_id: input.clientId || null,
@@ -526,7 +547,11 @@ export async function deleteTask(id: string) {
 export async function generateClientInvoice(
   campaignId: string,
   edited?: { campaignLineId: string | null; description: string; net: string }[],
-  clientPo?: string
+  clientPo?: string,
+  /** First day of the month this invoice covers, for clients invoiced monthly. */
+  periodMonth?: string | null,
+  /** The date the invoice carries — month end before the period it covers. */
+  invoiceDateIn?: string
 ) {
   const supabase = await createClient();
   const {
@@ -573,7 +598,19 @@ export async function generateClientInvoice(
   const po = clientPo === undefined ? c.client_po : clientPo.trim() || null;
 
   const today = new Date().toISOString().slice(0, 10);
-  const invoiceDate = monthEnd(today);
+  const invoiceDate = invoiceDateIn || monthEnd(today);
+
+  // One invoice per month per campaign — a second run of the same month is a
+  // mistake, not a second invoice.
+  if (periodMonth) {
+    const { data: clash } = await supabase
+      .from("client_invoices")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("period_month", periodMonth)
+      .maybeSingle();
+    if (clash) return { error: "That month has already been invoiced for this campaign." };
+  }
 
   // No number is minted here. ADEX's invoices run one sequence — 18824, 18825,
   // 18826 — owned by Xero, so the number is whatever Xero returns when the
@@ -586,6 +623,7 @@ export async function generateClientInvoice(
       amount_ex_vat: amount,
       outstanding: amount,
       client_po: po,
+      period_month: periodMonth ?? null,
       invoice_date: invoiceDate,
       due_date: dueDateFor(invoiceDate, c.start_date ?? null, terms),
     })
@@ -1110,6 +1148,7 @@ export type OrganisationInput = {
   paymentTermsDays: string;
   paymentTermsBasis: string;
   orderEmail: string;
+  monthlyInvoicing: boolean;
   addressLine1: string;
   addressLine2: string;
   city: string;
@@ -1149,6 +1188,7 @@ export async function saveOrganisation(input: OrganisationInput) {
     payment_terms_days: input.paymentTermsDays ? Number(input.paymentTermsDays) : null,
     payment_terms_basis: input.paymentTermsDays ? input.paymentTermsBasis || "month_end" : null,
     order_email: input.orderEmail.trim() || null,
+    monthly_invoicing: input.monthlyInvoicing,
     address_line1: input.addressLine1.trim() || null,
     address_line2: input.addressLine2.trim() || null,
     city: input.city.trim() || null,

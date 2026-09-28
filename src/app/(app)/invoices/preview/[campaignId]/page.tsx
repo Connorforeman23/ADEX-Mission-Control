@@ -10,12 +10,14 @@ export const dynamic = "force-dynamic";
 // costs nothing and leaves nothing behind.
 export default async function InvoicePreviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ campaignId: string }>;
+  searchParams: Promise<{ month?: string }>;
 }) {
   await requireFullAccess();
-  const { campaignId } = await params;
-  const invoice = await getInvoicePreview(campaignId);
+  const [{ campaignId }, { month }] = await Promise.all([params, searchParams]);
+  const invoice = await getInvoicePreview(campaignId, month);
   if (!invoice) notFound();
 
   return (

@@ -34,6 +34,7 @@ export default function OrganisationActions({
     paymentTermsDays: org.paymentTermsDays ? String(org.paymentTermsDays) : "",
     paymentTermsBasis: org.paymentTermsBasis ?? "month_end",
     orderEmail: org.orderEmail ?? "",
+    monthlyInvoicing: org.monthlyInvoicing,
     addressLine1: org.addressLine1 ?? "",
     addressLine2: org.addressLine2 ?? "",
     city: org.city ?? "",

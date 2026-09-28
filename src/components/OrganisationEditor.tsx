@@ -22,6 +22,7 @@ export const blankOrganisation = (ownerId = ""): OrganisationInput => ({
   paymentTermsDays: "",
   paymentTermsBasis: "month_end",
   orderEmail: "",
+  monthlyInvoicing: false,
   addressLine1: "",
   addressLine2: "",
   city: "",
@@ -225,6 +226,21 @@ export default function OrganisationEditor({
         <small className="sub-line">
           A client&rsquo;s terms set the due date on their invoices. The house default is invoice dated
           month end, due on the 25th of the next.
+        </small>
+        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={form.monthlyInvoicing}
+            onChange={(e) => set("monthlyInvoicing", e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: "var(--blue)" }}
+          />
+          <span style={{ textTransform: "none", letterSpacing: 0 }}>
+            Invoice monthly — one invoice per month rather than one per campaign
+          </span>
+        </label>
+        <small className="sub-line">
+          For clients like Randox who book across several months. Each month is invoiced whole:
+          the lines that start and finish in that month, never split across two invoices.
         </small>
         {form.isSupplier && (
           <label className="field">

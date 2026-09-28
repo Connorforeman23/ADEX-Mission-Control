@@ -46,7 +46,19 @@ export default function DashboardTasks({ tasks, today }: { tasks: TaskRow[]; tod
             />
             <div className="grow">
               <p>{t.title}</p>
-              <small>{t.about || "No link"}</small>
+              <small>
+                {t.about ? (
+                  t.aboutHref ? (
+                    <Link href={t.aboutHref} style={{ color: "var(--blue)" }}>
+                      {t.about}
+                    </Link>
+                  ) : (
+                    t.about
+                  )
+                ) : (
+                  "Not linked to anything"
+                )}
+              </small>
             </div>
             <span
               className="num"
@@ -55,7 +67,9 @@ export default function DashboardTasks({ tasks, today }: { tasks: TaskRow[]; tod
                 color: overdue ? "var(--crit)" : due ? "var(--warn)" : "var(--faint)",
               }}
             >
-              {t.due_date ? (overdue ? `${dateGB(t.due_date)} ⚠` : due ? "Today" : dateGB(t.due_date)) : "—"}
+              {t.due_date
+                ? `${overdue ? `${dateGB(t.due_date)} ⚠` : due ? "Today" : dateGB(t.due_date)}${t.due_time ? ` ${t.due_time}` : ""}`
+                : "—"}
             </span>
           </div>
         );

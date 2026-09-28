@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ADEX } from "@/lib/po";
 import { dateGB } from "@/lib/money";
-import { invoiceTotals, type ClientInvoice } from "@/lib/invoice";
+import { invoiceTotals, monthName, type ClientInvoice } from "@/lib/invoice";
 import { generateClientInvoice, saveClientInvoice } from "@/lib/actions";
 import { pushInvoiceToXero } from "@/lib/xero-actions";
 import { printAs } from "@/lib/print";
@@ -80,7 +81,13 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
     if (!invoice.campaignId) return;
     setBusy(true);
     setError(null);
-    const res = await generateClientInvoice(invoice.campaignId, payload(), clientPo);
+    const res = await generateClientInvoice(
+      invoice.campaignId,
+      payload(),
+      clientPo,
+      invoice.periodMonth,
+      invoice.invoiceDate
+    );
     setBusy(false);
     if (res.error) return setError(res.error);
     if (res.invoiceId) router.push(`/invoices/${res.invoiceId}`);
@@ -189,10 +196,41 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
           </>
         )}
       </div>
+      {unsaved && invoice.availableMonths.length > 1 && (
+        <div className="inv-periods">
+          <span className="eyebrow">Invoicing for</span>
+          {invoice.availableMonths.map((m) => {
+            const done = invoice.invoicedMonths.includes(m);
+            const on = m === invoice.periodMonth;
+            return (
+              <Link
+                key={m}
+                className={`btn${on ? " btn-primary" : ""}`}
+                href={`/invoices/preview/${invoice.campaignId}?month=${m}`}
+                title={done ? "Already invoiced" : undefined}
+                style={done && !on ? { opacity: 0.55 } : undefined}
+              >
+                {monthName(m)}
+                {done ? " ✓" : ""}
+              </Link>
+            );
+          })}
+        </div>
+      )}
       {unsaved && (
         <p className="inv-hint">
-          Nothing has been created yet. Check the wording and amounts, then <b>Save as draft</b> —
-          that is what creates the invoice record. Xero comes after.
+          {invoice.periodMonth ? (
+            <>
+              This client is invoiced monthly, so this covers <b>{monthName(invoice.periodMonth)}</b>{" "}
+              only — the lines that start and finish in that month, whole. Nothing has been created
+              yet; <b>Save as draft</b> is what creates it.
+            </>
+          ) : (
+            <>
+              Nothing has been created yet. Check the wording and amounts, then <b>Save as draft</b>{" "}
+              — that is what creates the invoice record. Xero comes after.
+            </>
+          )}
         </p>
       )}
       {error && <p style={{ color: "var(--crit)", fontSize: 12.5 }}>{error}</p>}
@@ -214,6 +252,12 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
                 <th>Invoice Date</th>
                 <td>{dateGB(invoice.invoiceDate)}</td>
               </tr>
+              {invoice.periodMonth && (
+                <tr>
+                  <th>Period</th>
+                  <td>{monthName(invoice.periodMonth)}</td>
+                </tr>
+              )}
               <tr>
                 <th>Payment Due On or Before</th>
                 <td>{invoice.dueDate ? dateGB(invoice.dueDate) : "—"}</td>
@@ -326,6 +370,13 @@ export default function InvoiceSheet({ invoice }: { invoice: ClientInvoice }) {
       </div>
 
       <style jsx global>{`
+        .inv-periods {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+        }
         .inv-controls {
           display: flex;
           gap: 12px;

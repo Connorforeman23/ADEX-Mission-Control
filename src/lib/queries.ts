@@ -2,10 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { VAT_RATE, type Campaign } from "@/lib/money";
 import { spaceOrderRows, termsLabel, type SpaceOrder } from "@/lib/po";
 import {
+  campaignMonths,
   draftInvoiceLines,
   dueDateFor,
   invoiceTotals,
   monthEnd,
+  monthStart,
   termsSentence,
   type ClientInvoice,
   type InvoiceLine,
@@ -77,11 +79,14 @@ export type TaskRow = {
   title: string;
   notes: string | null;
   due_date: string | null;
+  due_time: string | null;
   done: boolean;
   kind: string;
   assignee: string;
   assignee_id: string | null;
   about: string;
+  /** Where "relates to" goes when clicked, or null when it links nowhere. */
+  aboutHref: string | null;
   campaign_id: string | null;
   client_id: string | null;
   organisation_id: string | null;
@@ -93,7 +98,7 @@ export async function getTasks(): Promise<TaskRow[]> {
   const { data, error } = await supabase
     .from("tasks")
     .select(
-      `id, title, notes, due_date, done, kind, assignee_id, campaign_id, client_id, organisation_id, lead_id,
+      `id, title, notes, due_date, due_time, done, kind, assignee_id, campaign_id, client_id, organisation_id, lead_id,
        assignee:profiles!tasks_assignee_id_fkey ( full_name ),
        campaigns ( ref, name ),
        clients ( name ),
@@ -113,6 +118,7 @@ export async function getTasks(): Promise<TaskRow[]> {
     title: string;
     notes: string | null;
     due_date: string | null;
+    due_time: string | null;
     done: boolean;
     kind: string;
     assignee_id: string | null;
@@ -132,6 +138,8 @@ export async function getTasks(): Promise<TaskRow[]> {
     title: t.title,
     notes: t.notes,
     due_date: t.due_date,
+    // Postgres hands back "10:30:00"; nobody needs the seconds.
+    due_time: t.due_time ? t.due_time.slice(0, 5) : null,
     done: t.done,
     kind: t.kind,
     assignee: t.assignee?.full_name ?? "Unassigned",
@@ -142,6 +150,13 @@ export async function getTasks(): Promise<TaskRow[]> {
       t.clients?.name ||
       (t.leads && `Lead: ${t.leads.name}`) ||
       "",
+    // Straight to the campaign, organisation or pipeline the task is about —
+    // a task is only useful next to the thing it concerns (Rick).
+    aboutHref:
+      (t.campaign_id && `/campaigns?open=${t.campaign_id}`) ||
+      (t.organisation_id && `/organisations/${t.organisation_id}`) ||
+      (t.lead_id && "/pipeline") ||
+      null,
     campaign_id: t.campaign_id,
     client_id: t.client_id,
     organisation_id: t.organisation_id,
@@ -330,7 +345,7 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
   const { data: org, error } = await supabase
     .from("organisations")
     .select(
-      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, owner_id, address_line1, address_line2, city, postcode, country, phone, notes, payment_terms_days, payment_terms_basis, order_email, profiles ( full_name )"
+      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, owner_id, address_line1, address_line2, city, postcode, country, phone, notes, payment_terms_days, payment_terms_basis, order_email, monthly_invoicing, profiles ( full_name )"
     )
     .eq("id", id)
     .maybeSingle();
@@ -395,6 +410,7 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
     paymentTermsDays: (o.payment_terms_days as number | null) ?? null,
     paymentTermsBasis: (o.payment_terms_basis as string | null) ?? null,
     orderEmail: (o.order_email as string | null) ?? null,
+    monthlyInvoicing: Boolean(o.monthly_invoicing),
 
     orders: ((ordersRes.data ?? []) as unknown as {
       id: string;
@@ -656,7 +672,7 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
   const { data: invoice, error } = await supabase
     .from("client_invoices")
     .select(
-      `id, campaign_id, invoice_no, invoice_date, due_date, status, client_po, xero_id,
+      `id, campaign_id, invoice_no, invoice_date, due_date, status, client_po, xero_id, period_month,
        campaigns ( ref, name, client_po, clients ( name ) )`
     )
     .eq("id", invoiceId)
@@ -677,6 +693,7 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
     status: string;
     client_po: string | null;
     xero_id: string | null;
+    period_month: string | null;
     campaigns: {
       ref: string;
       name: string;
@@ -712,9 +729,23 @@ export async function getClientInvoice(invoiceId: string): Promise<ClientInvoice
 
   const { net, vat, total } = invoiceTotals(lines);
 
+  // Which months this campaign has been invoiced for already — so a monthly
+  // client's next preview offers only what is left.
+  const { data: siblings } = await supabase
+    .from("client_invoices")
+    .select("period_month")
+    .eq("campaign_id", inv.campaign_id ?? "")
+    .not("period_month", "is", null);
+  const invoicedMonths = ((siblings ?? []) as { period_month: string }[])
+    .map((r) => monthStart(r.period_month))
+    .sort();
+
   return {
     id: inv.id,
     terms: termsSentence(terms),
+    periodMonth: inv.period_month ? monthStart(inv.period_month) : null,
+    availableMonths: [],
+    invoicedMonths,
     invoiceNo: inv.invoice_no,
     invoiceDate: inv.invoice_date,
     dueDate: inv.due_date,
@@ -778,7 +809,10 @@ async function clientAddressFor(
  * the same document from the campaign alone; "Save as draft" on that page is
  * what creates the row. The empty id is how the sheet knows it is unsaved.
  */
-export async function getInvoicePreview(campaignId: string): Promise<ClientInvoice | null> {
+export async function getInvoicePreview(
+  campaignId: string,
+  requestedMonth?: string
+): Promise<ClientInvoice | null> {
   const supabase = await createClient();
 
   const { data: campaign, error } = await supabase
@@ -799,18 +833,49 @@ export async function getInvoicePreview(campaignId: string): Promise<ClientInvoi
 
   const c = campaign as unknown as Campaign & { client_po: string | null };
   const client = c.clients?.name ?? "—";
-  const lines = draftInvoiceLines(c);
-  const [clientAddress, terms] = await Promise.all([
+
+  const [clientAddress, terms, { data: org }, { data: siblings }] = await Promise.all([
     clientAddressFor(supabase, client),
     clientTermsFor(supabase, client),
+    supabase.from("organisations").select("monthly_invoicing").ilike("name", client).maybeSingle(),
+    supabase
+      .from("client_invoices")
+      .select("period_month")
+      .eq("campaign_id", campaignId)
+      .not("period_month", "is", null),
   ]);
 
-  const invoiceDate = monthEnd(new Date().toISOString().slice(0, 10));
+  // Monthly invoicing is a per-client setting — on for Randox, off for
+  // everyone else, who keep one invoice per campaign.
+  const monthly = Boolean((org as { monthly_invoicing: boolean } | null)?.monthly_invoicing);
+  const availableMonths = monthly ? campaignMonths(c) : [];
+  const invoicedMonths = ((siblings ?? []) as { period_month: string }[])
+    .map((r) => monthStart(r.period_month))
+    .sort();
+
+  // Default to the first month not yet invoiced — at the end of September
+  // that is October, which is what the run is for.
+  const periodMonth = monthly
+    ? (requestedMonth && availableMonths.includes(monthStart(requestedMonth))
+        ? monthStart(requestedMonth)
+        : availableMonths.find((m) => !invoicedMonths.includes(m)) ?? availableMonths[0] ?? null)
+    : null;
+
+  const lines = draftInvoiceLines(c, periodMonth);
+
+  // A monthly invoice is dated the end of the month BEFORE the one it covers:
+  // October's work is invoiced at the end of September.
+  const invoiceDate = periodMonth
+    ? monthEnd(new Date(new Date(periodMonth + "T00:00:00").setDate(0)).toISOString().slice(0, 10))
+    : monthEnd(new Date().toISOString().slice(0, 10));
   const { net, vat, total } = invoiceTotals(lines);
 
   return {
     id: "",
     terms: termsSentence(terms),
+    periodMonth,
+    availableMonths,
+    invoicedMonths,
     invoiceNo: null,
     invoiceDate,
     dueDate: dueDateFor(invoiceDate, c.start_date ?? null, terms),
