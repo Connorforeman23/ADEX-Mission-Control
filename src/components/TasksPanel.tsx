@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
 import Segmented from "@/components/Segmented";
@@ -12,6 +13,7 @@ const blank = (assigneeId: string, organisationId?: string): TaskInput => ({
   title: "",
   notes: "",
   dueDate: "",
+  dueTime: "",
   assigneeId,
   organisationId: organisationId || undefined,
 });
@@ -76,6 +78,7 @@ export default function TasksPanel({
       title: t.title,
       notes: t.notes ?? "",
       dueDate: t.due_date ?? "",
+      dueTime: t.due_time ?? "",
       assigneeId: t.assignee_id ?? "",
       campaignId: t.campaign_id ?? undefined,
       clientId: t.client_id ?? undefined,
@@ -171,10 +174,23 @@ export default function TasksPanel({
                           </button>
                           {t.notes && <div className="sub-line">{t.notes}</div>}
                         </td>
-                        <td className="sub-line">{t.about || "—"}</td>
+                        <td className="sub-line">
+                          {t.about ? (
+                            t.aboutHref ? (
+                              <Link href={t.aboutHref} style={{ color: "var(--blue)" }}>
+                                {t.about}
+                              </Link>
+                            ) : (
+                              t.about
+                            )
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                         <td className="sub-line">{t.assignee}</td>
                         <td className="num" style={{ color: overdue ? "var(--crit)" : undefined, whiteSpace: "nowrap" }}>
                           {t.due_date ? dateGB(t.due_date) : "—"}
+                          {t.due_time ? ` ${t.due_time}` : ""}
                           {overdue ? " ⚠" : ""}
                         </td>
                         <td>
@@ -220,6 +236,19 @@ export default function TasksPanel({
                   value={editing.dueDate}
                   onChange={(e) => setEditing({ ...editing, dueDate: e.target.value })}
                 />
+              </label>
+              <label className="field">
+                <span>Time (optional)</span>
+                <input
+                  className="input num"
+                  type="time"
+                  value={editing.dueTime}
+                  onChange={(e) => setEditing({ ...editing, dueTime: e.target.value })}
+                  disabled={!editing.dueDate}
+                />
+                <small className="sub-line" style={{ marginTop: 4 }}>
+                  Leave blank for a whole-day task. A time is what puts it in a calendar.
+                </small>
               </label>
               <label className="field">
                 <span>Assignee</span>

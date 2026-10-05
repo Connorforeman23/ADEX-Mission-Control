@@ -277,11 +277,23 @@ export default function BookingForm({
                 </label>
                 <label className="field">
                   <span>Start date</span>
-                  <input className="input num" type="date" required value={l.start_date} onChange={(e) => updateLine(i, { start_date: e.target.value })} />
+                  <input
+                    className="input num"
+                    type="date"
+                    required={!l.selected_dates.trim()}
+                    value={l.start_date}
+                    onChange={(e) => updateLine(i, { start_date: e.target.value })}
+                  />
                 </label>
                 <label className="field">
                   <span>End date</span>
-                  <input className="input num" type="date" required value={l.end_date} onChange={(e) => updateLine(i, { end_date: e.target.value })} />
+                  <input
+                    className="input num"
+                    type="date"
+                    required={!l.selected_dates.trim()}
+                    value={l.end_date}
+                    onChange={(e) => updateLine(i, { end_date: e.target.value })}
+                  />
                 </label>
                 <label className="field wide">
                   <span>Selected dates (optional)</span>
@@ -292,8 +304,9 @@ export default function BookingForm({
                     placeholder="Specific days only — e.g. 13 Jul, 20 Jul, 27 Jul or 13.07.26, 20.07.26"
                   />
                   <small className="sub-line" style={{ marginTop: 4 }}>
-                    Leave blank if the line runs the whole date range. Any date format works; each
-                    date is checked against the start and end when you save.
+                    Fill in <b>either</b> a start and end date <b>or</b> these specific dates — a TV
+                    campaign for a whole month, or press ads every Tuesday and Thursday. Any date
+                    format works: 20 Oct, 20.10.26, 20/10/2026.
                   </small>
                 </label>
                 <label className="field">

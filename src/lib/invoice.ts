@@ -29,6 +29,12 @@ export type ClientInvoice = {
   id: string;
   /** The sentence at the foot: the client's own terms, or the house default. */
   terms: string;
+  /** First day of the month this invoice covers; null = the whole campaign. */
+  periodMonth: string | null;
+  /** Every month this campaign runs in — what else could be invoiced. */
+  availableMonths: string[];
+  /** Months already invoiced, so the preview doesn't offer them twice. */
+  invoicedMonths: string[];
   invoiceNo: string | null;
   invoiceDate: string;
   dueDate: string | null;
@@ -112,6 +118,51 @@ export function lineDescription(l: CampaignLine) {
   return dates ? `${what} ${dates}` : what;
 }
 
+// --- monthly invoicing (decision B) -------------------------------------
+//
+// Randox books campaigns running over several months and wants an invoice per
+// month. Connor's rule, and it is deliberately simple:
+//
+//   A line is invoiced WHOLE, in the month it runs. Nothing is ever split
+//   across months by days. At the end of September ADEX invoices everything
+//   running in October — a line that starts AND finishes inside October is
+//   invoiced then, and nothing else is.
+//
+// A line crossing a month end belongs to the month it STARTS, so every line
+// lands in exactly one invoice and nothing is billed twice or missed.
+
+/** "2026-10-01" — the first day of the month a date falls in. */
+export function monthStart(iso: string) {
+  return iso.slice(0, 8) + "01";
+}
+
+/** "October 2026", for the invoice and the period picker. */
+export function monthName(iso: string) {
+  return new Date(iso.slice(0, 8) + "01T00:00:00").toLocaleDateString("en-GB", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** Does this line belong to that month? By the month it starts in. */
+export function lineInMonth(l: CampaignLine, periodMonth: string) {
+  return !!l.start_date && monthStart(l.start_date) === monthStart(periodMonth);
+}
+
+/**
+ * Every month a campaign has lines running in, oldest first.
+ *
+ * This is what the preview offers as periods to invoice, and what tells you
+ * at a glance that a campaign needs three invoices rather than one.
+ */
+export function campaignMonths(campaign: Campaign): string[] {
+  const months = new Set<string>();
+  for (const l of campaign.campaign_lines) {
+    if (l.start_date) months.add(monthStart(l.start_date));
+  }
+  return [...months].sort();
+}
+
 /**
  * The invoice ADEX would send for a campaign, before anyone edits it.
  *
@@ -129,9 +180,14 @@ export function lineDescription(l: CampaignLine) {
  * Zero-value lines are kept: 18824 prints "1 x DEP Platinum Production" at
  * 0.00 because the client expects to see the item listed either way.
  */
-export function draftInvoiceLines(campaign: Campaign): InvoiceLine[] {
+export function draftInvoiceLines(campaign: Campaign, periodMonth?: string | null): InvoiceLine[] {
+  // For a client invoiced monthly, only the lines running in that month.
+  const inScope = periodMonth
+    ? campaign.campaign_lines.filter((l) => lineInMonth(l, periodMonth))
+    : campaign.campaign_lines;
+
   const groups = new Map<string, CampaignLine[]>();
-  for (const l of campaign.campaign_lines) {
+  for (const l of inScope) {
     const key = `${l.line_type ?? "media"}|${lineSubject(l).toLowerCase()}`;
     const group = groups.get(key);
     if (group) group.push(l);
@@ -157,7 +213,11 @@ export function draftInvoiceLines(campaign: Campaign): InvoiceLine[] {
   });
 
   // The agency fee is charged on top of the media, so it is its own line.
-  const fee = Number(campaign.fee);
+  // On a monthly campaign it belongs to the FIRST month only — charging it
+  // every month would bill it three times over.
+  const months = campaignMonths(campaign);
+  const feeApplies = !periodMonth || monthStart(periodMonth) === months[0];
+  const fee = feeApplies ? Number(campaign.fee) : 0;
   if (fee) {
     lines.push({
       id: "fee",

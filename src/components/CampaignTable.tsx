@@ -28,6 +28,7 @@ import Drawer from "@/components/Drawer";
 import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
 import BookingForm, { type EditingCampaign } from "@/components/BookingForm";
+import CopyCampaign from "@/components/CopyCampaign";
 import { updateCampaignStatus } from "@/lib/actions";
 
 const BOARD_COLUMNS: { key: string; label: string; stripe: string }[] = [
@@ -689,6 +690,10 @@ function CampaignDetail({
         <button className="btn btn-primary" onClick={onEdit}>
           Edit campaign
         </button>
+        <CopyCampaign
+          campaignId={c.id}
+          needsCreativeDeadline={c.campaign_lines.some((l) => l.copy_instruction === "New Copy")}
+        />
         <FollowUp
           campaignId={c.id}
           defaultTitle={`Follow up: ${c.name} (${c.ref})`}

@@ -121,6 +121,8 @@ export type OrganisationDetail = {
   paymentTermsBasis: string | null;
   /** Where this supplier's Space Orders are sent; several addresses allowed. */
   orderEmail: string | null;
+  /** Invoice this client a month at a time rather than once per campaign. */
+  monthlyInvoicing: boolean;
   contacts: OrgContact[];
   /** Space Orders bought from this supplier. */
   orders: OrgOrder[];
