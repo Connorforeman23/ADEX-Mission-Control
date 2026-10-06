@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getOrganisation, getSalesTeam } from "@/lib/queries";
+import { getOrganisation, getOrganisationTimeline, getSalesTeam } from "@/lib/queries";
+import OrgTimeline from "@/components/OrgTimeline";
 import { CUSTOMER_STATUS_LABEL } from "@/lib/organisations";
 import { dateGB, gbp, rangeGB, STATUS_LABEL } from "@/lib/money";
 import OrganisationActions from "@/components/OrganisationActions";
@@ -15,7 +16,11 @@ export default async function OrganisationPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [org, staff] = await Promise.all([getOrganisation(id), getSalesTeam()]);
+  const [org, staff, timeline] = await Promise.all([
+    getOrganisation(id),
+    getSalesTeam(),
+    getOrganisationTimeline(id),
+  ]);
   if (!org) notFound();
 
   const billings = org.campaigns.reduce((a, c) => a + c.value, 0);
@@ -244,37 +249,15 @@ export default async function OrganisationPage({
           </div>
         </section>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Relationship history</h2>
-            <span className="sub">Customer status changes</span>
-          </div>
-          <div className="card-body">
-            {org.history.length === 0 ? (
-              <p className="empty-note">No status changes recorded.</p>
-            ) : (
-              <div className="rows">
-                {org.history.map((h) => (
-                  <div className="row" key={h.id}>
-                    <div className="grow">
-                      <p>
-                        {h.old_status
-                          ? `${CUSTOMER_STATUS_LABEL[h.old_status] ?? h.old_status} → ${
-                              CUSTOMER_STATUS_LABEL[h.new_status] ?? h.new_status
-                            }`
-                          : `Created as ${CUSTOMER_STATUS_LABEL[h.new_status] ?? h.new_status}`}
-                      </p>
-                      <small>
-                        {dateGB(h.changed_at.slice(0, 10))} · {h.changed_by}
-                        {h.reason ? ` · ${h.reason}` : ""}
-                      </small>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <OrgTimeline
+          organisationId={org.id}
+          entries={timeline}
+          contacts={org.contacts.map((c) => ({ id: c.id, name: c.name }))}
+          campaigns={org.campaigns.map((c) => ({ id: c.id, ref: c.ref, name: c.name }))}
+        />
       </div>
     </div>
   );

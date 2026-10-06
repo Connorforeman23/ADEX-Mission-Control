@@ -38,6 +38,7 @@ export default function FollowUp({
       dueDate: date,
       // A quick follow-up is a whole-day task; set a time on the Tasks page.
       dueTime: "",
+      taskType: "Chase",
       assigneeId: assignee,
       campaignId,
       clientId,

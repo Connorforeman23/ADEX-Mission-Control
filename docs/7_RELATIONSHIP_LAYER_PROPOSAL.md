@@ -111,39 +111,23 @@ slipped in. (Package 7C, with its own note.)
 
 ---
 
-## Decisions needed
+## Decisions — answered 6 October 2026
 
-**1. Full email content — confirm, with eyes open.** 4.2 proposed storing
-subject and the first 250 characters. This proposal stores everything. That is
-defensible and more useful, but it means the CRM holds the complete
-correspondence between ADEX and its clients and suppliers. Three consequences:
+**1. Full email content.** YES — the whole message is stored, for emails
+involving a company already in the CRM.
 
-- **Volume.** Six mailboxes × three months of history, then ongoing. Manageable,
-  but not free.
-- **Who can read it.** "Authorised account users" needs defining. Proposed:
-  any full-staff user sees any organisation's correspondence — that is the
-  point of shared history — and restricted users see none of it. Say if it
-  should instead be limited to the account owner.
-- **Retention.** Mail kept for ever becomes a liability. Proposed: keep for
-  two years, then delete the body and retain subject, date and participants.
+**2. Who can read it.** Everyone with full CRM access can read any client's
+correspondence; restricted users see none of it.
 
-**2. Public email domains.** Domain matching cannot apply to gmail.com,
-hotmail.co.uk, outlook.com and the like — one contact at Gmail would pull in
-every Gmail sender. Those match on the exact address only. Confirm.
+**3. Retention.** Two years. After that the body is deleted and the subject,
+date and participants are kept.
 
-**3. What "an external participant" means.** Proposed: any sender or recipient
-outside advertisingexcellence.co.uk. Internal-only mail is never captured,
-which is what makes connecting a mailbox acceptable to the person connecting
-it.
+**4. Task types.** Prep covers creative and copy deadlines. Built that way in
+7A — the booking form still raises those tasks automatically, typed as Prep.
 
-**4. Task types.** Chase · Prep · Admin · Meeting — does Prep cover creative
-deadlines and copy deadlines, or should Creative stay its own type? The
-booking form raises creative tasks automatically today.
-
-**5. The 09:30 job and its credentials** — see 7B. Decide when we get there,
-not now.
-
----
+Still open, and asked of IT rather than Connor: **is the shared drive on
+SharePoint/OneDrive or a server in the office?** Filing Space Orders to the
+client folder automatically depends on the answer.
 
 ## Order
 
