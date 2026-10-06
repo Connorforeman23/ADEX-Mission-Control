@@ -264,6 +264,7 @@ export async function createCampaign(input: CampaignInput) {
       notes: `New copy deadline for ${clientName}. Design: ${input.designSource === "inhouse" ? "in-house studio" : "client supplied"}.`,
       due_date: input.creativeDeadline,
       kind: "creative",
+      task_type: "Prep",
       assignee_id: assignee,
       campaign_id: campaign.id,
       client_id: clientId,
@@ -478,6 +479,11 @@ export type TaskInput = {
   dueDate: string;
   /** Optional "10:30" — a task with an hour becomes a calendar entry later. */
   dueTime: string;
+  /** Chase · Prep · Admin · Meeting. */
+  taskType: string;
+  /** Open · Done · Parked. Parked keeps a prospect off the exception report. */
+  status?: string;
+  contactId?: string;
   assigneeId: string;
   campaignId?: string;
   clientId?: string;
@@ -499,6 +505,9 @@ export async function saveTask(input: TaskInput) {
     notes: input.notes.trim() || null,
     due_date: input.dueDate || null,
     due_time: input.dueTime || null,
+    task_type: input.taskType || "Chase",
+    status: input.status || "Open",
+    contact_id: input.contactId || null,
     assignee_id: input.assigneeId || null,
     campaign_id: input.campaignId || null,
     client_id: input.clientId || null,
@@ -895,6 +904,7 @@ async function promoteWonLead(
     notes: `Deal closed won at £${Number(lead.value).toLocaleString("en-GB")}. ${campaign ? `Campaign ${campaign.ref} is open — add the booking lines.` : "Open the campaign and add booking lines."}`,
     due_date: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
     kind: "follow-up",
+    task_type: "Chase",
     assignee_id: lead.owner_id,
     campaign_id: campaign?.id ?? null,
     client_id: clientId,
@@ -1485,4 +1495,159 @@ export async function copyCampaign(
     designSource: "inhouse",
     lines,
   });
+}
+
+// --- activities ----------------------------------------------------------
+// Everything that happened which isn't an email: calls, WhatsApp, texts,
+// meetings, notes. Emails join the same timeline when Outlook is connected.
+
+export type ActivityInput = {
+  id?: string;
+  kind: "Call" | "WhatsApp" | "Text" | "Meeting" | "Note";
+  /** When it happened — not when it was typed up. */
+  happenedAt: string;
+  summary: string;
+  detail: string;
+  organisationId?: string;
+  contactId?: string;
+  campaignId?: string;
+  leadId?: string;
+  /** Set when this is the outcome of completing a task. */
+  taskId?: string;
+};
+
+export async function saveActivity(input: ActivityInput) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in." };
+  if (!input.summary.trim()) return { error: "Say what happened." };
+  if (!input.organisationId) return { error: "An activity has to be about an organisation." };
+
+  const row = {
+    kind: input.kind,
+    source: "manual",
+    happened_at: input.happenedAt || new Date().toISOString(),
+    summary: input.summary.trim(),
+    detail: input.detail.trim() || null,
+    organisation_id: input.organisationId,
+    contact_id: input.contactId || null,
+    campaign_id: input.campaignId || null,
+    lead_id: input.leadId || null,
+    task_id: input.taskId || null,
+    created_by: user.id,
+  };
+
+  const { error } = input.id
+    ? await supabase.from("activities").update(row).eq("id", input.id)
+    : await supabase.from("activities").insert(row);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/organisations/${input.organisationId}`);
+  revalidatePath("/tasks");
+  return {};
+}
+
+export async function deleteActivity(id: string, organisationId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("activities").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/organisations/${organisationId}`);
+  return {};
+}
+
+/**
+ * Finish a task, and in one step record what happened and what comes next.
+ *
+ * This is the mechanism that makes the follow-up discipline work. "Every
+ * prospect must have a future task" is unenforceable as a rule; it only holds
+ * if creating the next one is the natural end of finishing the last one.
+ *
+ * Both halves are optional — a task that needs neither just closes.
+ */
+export async function completeTask(input: {
+  taskId: string;
+  /** What happened, logged as an activity against the organisation. */
+  outcome?: { kind: ActivityInput["kind"]; summary: string; detail: string };
+  /** The next task: a title and a date, inheriting this task's links. */
+  followUp?: { title: string; dueDate: string; dueTime: string };
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in." };
+
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("id, title, assignee_id, organisation_id, contact_id, campaign_id, lead_id, task_type")
+    .eq("id", input.taskId)
+    .maybeSingle();
+  if (!task) return { error: "Task not found." };
+  const t = task as {
+    id: string;
+    title: string;
+    assignee_id: string | null;
+    organisation_id: string | null;
+    contact_id: string | null;
+    campaign_id: string | null;
+    lead_id: string | null;
+    task_type: string;
+  };
+
+  const { error } = await supabase
+    .from("tasks")
+    .update({ status: "Done" })
+    .eq("id", input.taskId);
+  if (error) return { error: error.message };
+
+  // The outcome needs an organisation to hang on; a task without one can
+  // still be completed, it just leaves no trace on a timeline.
+  if (input.outcome?.summary.trim() && t.organisation_id) {
+    await supabase.from("activities").insert({
+      kind: input.outcome.kind,
+      source: "manual",
+      happened_at: new Date().toISOString(),
+      summary: input.outcome.summary.trim(),
+      detail: input.outcome.detail.trim() || null,
+      organisation_id: t.organisation_id,
+      contact_id: t.contact_id,
+      campaign_id: t.campaign_id,
+      lead_id: t.lead_id,
+      task_id: t.id,
+      created_by: user.id,
+    });
+  }
+
+  if (input.followUp?.title.trim() && input.followUp.dueDate) {
+    await supabase.from("tasks").insert({
+      title: input.followUp.title.trim(),
+      due_date: input.followUp.dueDate,
+      due_time: input.followUp.dueTime || null,
+      task_type: t.task_type,
+      kind: "follow-up",
+      assignee_id: t.assignee_id,
+      organisation_id: t.organisation_id,
+      contact_id: t.contact_id,
+      campaign_id: t.campaign_id,
+      lead_id: t.lead_id,
+      created_by: user.id,
+    });
+  }
+
+  revalidatePath("/tasks");
+  revalidatePath("/");
+  if (t.organisation_id) revalidatePath(`/organisations/${t.organisation_id}`);
+  return {};
+}
+
+/** Park a task — no longer chasing, and not counted as missing a next action. */
+export async function setTaskStatus(id: string, status: "Open" | "Done" | "Parked") {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tasks").update({ status }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tasks");
+  revalidatePath("/");
+  return {};
 }

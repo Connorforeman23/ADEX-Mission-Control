@@ -132,3 +132,28 @@ export type OrganisationDetail = {
   history: OrgStatusEvent[];
   supplier_spend: number;
 };
+
+/** One entry on an organisation's timeline, whatever produced it. */
+export type TimelineEntry = {
+  id: string;
+  /** Call · WhatsApp · Text · Meeting · Note · Email · Task · Status */
+  kind: string;
+  at: string;
+  summary: string;
+  detail: string | null;
+  who: string;
+  /** Where clicking it goes, when there is somewhere to go. */
+  href: string | null;
+};
+
+/** The filter chips above the timeline. */
+export const TIMELINE_KINDS = [
+  "Call",
+  "WhatsApp",
+  "Text",
+  "Meeting",
+  "Note",
+  "Email",
+  "Task",
+  "Status",
+] as const;

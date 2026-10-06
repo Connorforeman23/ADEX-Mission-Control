@@ -15,10 +15,12 @@ import {
 } from "@/lib/invoice";
 // Row type lives in lib/organisations.ts (no server imports) so client
 // components can use it without pulling this module into the browser bundle.
+import { CUSTOMER_STATUS_LABEL } from "@/lib/organisations";
 import type {
   OrganisationRow,
   OrganisationDetail,
   OrgInvoice,
+  TimelineEntry,
 } from "@/lib/organisations";
 
 // Campaigns with their client, owner and booking lines in one round trip.
@@ -81,6 +83,10 @@ export type TaskRow = {
   due_date: string | null;
   due_time: string | null;
   done: boolean;
+  /** Open · Done · Parked. */
+  status: string;
+  /** Chase · Prep · Admin · Meeting. */
+  task_type: string;
   kind: string;
   assignee: string;
   assignee_id: string | null;
@@ -90,6 +96,7 @@ export type TaskRow = {
   campaign_id: string | null;
   client_id: string | null;
   organisation_id: string | null;
+  contact_id: string | null;
   lead_id: string | null;
 };
 
@@ -98,7 +105,7 @@ export async function getTasks(): Promise<TaskRow[]> {
   const { data, error } = await supabase
     .from("tasks")
     .select(
-      `id, title, notes, due_date, due_time, done, kind, assignee_id, campaign_id, client_id, organisation_id, lead_id,
+      `id, title, notes, due_date, due_time, done, status, task_type, kind, assignee_id, campaign_id, client_id, organisation_id, contact_id, lead_id,
        assignee:profiles!tasks_assignee_id_fkey ( full_name ),
        campaigns ( ref, name ),
        clients ( name ),
@@ -120,8 +127,11 @@ export async function getTasks(): Promise<TaskRow[]> {
     due_date: string | null;
     due_time: string | null;
     done: boolean;
+    status: string;
+    task_type: string;
     kind: string;
     assignee_id: string | null;
+    contact_id: string | null;
     campaign_id: string | null;
     client_id: string | null;
     organisation_id: string | null;
@@ -141,6 +151,8 @@ export async function getTasks(): Promise<TaskRow[]> {
     // Postgres hands back "10:30:00"; nobody needs the seconds.
     due_time: t.due_time ? t.due_time.slice(0, 5) : null,
     done: t.done,
+    status: t.status,
+    task_type: t.task_type,
     kind: t.kind,
     assignee: t.assignee?.full_name ?? "Unassigned",
     assignee_id: t.assignee_id,
@@ -160,6 +172,7 @@ export async function getTasks(): Promise<TaskRow[]> {
     campaign_id: t.campaign_id,
     client_id: t.client_id,
     organisation_id: t.organisation_id,
+    contact_id: t.contact_id,
     lead_id: t.lead_id,
   }));
 }
@@ -892,4 +905,216 @@ export async function getInvoicePreview(
     vat,
     total,
   };
+}
+
+// --- organisation timeline -----------------------------------------------
+
+/**
+ * Everything that has happened with one organisation, newest first.
+ *
+ * Three sources merged into one list: activities logged by hand, tasks that
+ * were completed, and changes to the customer relationship. Emails and
+ * meetings join the same list when Outlook is connected — they arrive as
+ * activities, so nothing here changes when they do.
+ */
+export async function getOrganisationTimeline(
+  organisationId: string,
+  limit = 100
+): Promise<TimelineEntry[]> {
+  const supabase = await createClient();
+
+  const [actsRes, tasksRes, histRes] = await Promise.all([
+    supabase
+      .from("activities")
+      .select("id, kind, happened_at, summary, detail, campaign_id, profiles ( full_name )")
+      .eq("organisation_id", organisationId)
+      .order("happened_at", { ascending: false })
+      .limit(limit),
+    supabase
+      .from("tasks")
+      .select("id, title, notes, due_date, task_type, status, campaign_id, profiles!tasks_assignee_id_fkey ( full_name )")
+      .eq("organisation_id", organisationId)
+      .eq("status", "Done")
+      .order("due_date", { ascending: false, nullsFirst: false })
+      .limit(limit),
+    supabase
+      .from("organisation_status_history")
+      .select("id, old_status, new_status, changed_at, reason, profiles ( full_name )")
+      .eq("organisation_id", organisationId)
+      .order("changed_at", { ascending: false })
+      .limit(limit),
+  ]);
+
+  const entries: TimelineEntry[] = [];
+
+  for (const a of (actsRes.data ?? []) as unknown as {
+    id: string;
+    kind: string;
+    happened_at: string;
+    summary: string;
+    detail: string | null;
+    campaign_id: string | null;
+    profiles: { full_name: string } | null;
+  }[]) {
+    entries.push({
+      id: `a-${a.id}`,
+      kind: a.kind,
+      at: a.happened_at,
+      summary: a.summary,
+      detail: a.detail,
+      who: a.profiles?.full_name ?? "—",
+      href: a.campaign_id ? `/campaigns?open=${a.campaign_id}` : null,
+    });
+  }
+
+  for (const t of (tasksRes.data ?? []) as unknown as {
+    id: string;
+    title: string;
+    notes: string | null;
+    due_date: string | null;
+    task_type: string;
+    campaign_id: string | null;
+    profiles: { full_name: string } | null;
+  }[]) {
+    entries.push({
+      id: `t-${t.id}`,
+      kind: "Task",
+      // A completed task is dated by when it was due; without a date it sorts
+      // last rather than pretending to a time it never had.
+      at: t.due_date ? `${t.due_date}T12:00:00.000Z` : "",
+      summary: `${t.task_type}: ${t.title}`,
+      detail: t.notes,
+      who: t.profiles?.full_name ?? "—",
+      href: t.campaign_id ? `/campaigns?open=${t.campaign_id}` : "/tasks",
+    });
+  }
+
+  for (const h of (histRes.data ?? []) as unknown as {
+    id: string;
+    old_status: string | null;
+    new_status: string;
+    changed_at: string;
+    reason: string | null;
+    profiles: { full_name: string } | null;
+  }[]) {
+    entries.push({
+      id: `h-${h.id}`,
+      kind: "Status",
+      at: h.changed_at,
+      summary: `${CUSTOMER_STATUS_LABEL[h.old_status ?? ""] ?? h.old_status ?? "New"} → ${
+        CUSTOMER_STATUS_LABEL[h.new_status] ?? h.new_status
+      }`,
+      detail: h.reason,
+      who: h.profiles?.full_name ?? "—",
+      href: null,
+    });
+  }
+
+  return entries.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+}
+
+// --- follow-up discipline -------------------------------------------------
+
+export type FollowUpException = {
+  kind: "no-next-action" | "overdue";
+  organisationId: string | null;
+  organisation: string;
+  what: string;
+  owner: string;
+  ownerId: string | null;
+  /** How far past due, for an overdue task. */
+  since: string | null;
+  href: string;
+};
+
+/**
+ * Where the follow-up discipline is slipping.
+ *
+ * Rick's rule: every active prospect must have a future task unless it has
+ * been deliberately parked. Two ways that fails — a prospect nobody is
+ * chasing, and a task that was raised and then missed.
+ *
+ * "Parked" is what makes the rule liveable: a prospect legitimately set aside
+ * has a parked task against it and stops appearing here.
+ */
+export async function getFollowUpExceptions(): Promise<FollowUpException[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [orgsRes, tasksRes] = await Promise.all([
+    supabase
+      .from("organisations")
+      .select("id, name, customer_status, profiles ( full_name ), owner_id")
+      .eq("archived", false)
+      .in("customer_status", ["prospect", "active_client"]),
+    supabase
+      .from("tasks")
+      .select(
+        "id, title, due_date, status, organisation_id, assignee_id, profiles!tasks_assignee_id_fkey ( full_name )"
+      )
+      .in("status", ["Open", "Parked"]),
+  ]);
+
+  type OrgRow = {
+    id: string;
+    name: string;
+    customer_status: string;
+    owner_id: string | null;
+    profiles: { full_name: string } | null;
+  };
+  type TaskRow = {
+    id: string;
+    title: string;
+    due_date: string | null;
+    status: string;
+    organisation_id: string | null;
+    assignee_id: string | null;
+    profiles: { full_name: string } | null;
+  };
+
+  const orgs = (orgsRes.data ?? []) as unknown as OrgRow[];
+  const tasks = (tasksRes.data ?? []) as unknown as TaskRow[];
+
+  // A future open task, or any parked one, counts as "being handled".
+  const handled = new Set<string>();
+  for (const t of tasks) {
+    if (!t.organisation_id) continue;
+    if (t.status === "Parked" || (t.due_date && t.due_date >= today)) {
+      handled.add(t.organisation_id);
+    }
+  }
+
+  const out: FollowUpException[] = orgs
+    .filter((o) => !handled.has(o.id))
+    .map((o) => ({
+      kind: "no-next-action" as const,
+      organisationId: o.id,
+      organisation: o.name,
+      what:
+        o.customer_status === "prospect"
+          ? "Prospect with no next action"
+          : "Active client with no next action",
+      owner: o.profiles?.full_name ?? "Unassigned",
+      ownerId: o.owner_id,
+      since: null,
+      href: `/organisations/${o.id}`,
+    }));
+
+  const orgName = new Map(orgs.map((o) => [o.id, o.name]));
+  for (const t of tasks) {
+    if (t.status !== "Open" || !t.due_date || t.due_date >= today) continue;
+    out.push({
+      kind: "overdue",
+      organisationId: t.organisation_id,
+      organisation: (t.organisation_id && orgName.get(t.organisation_id)) || "—",
+      what: t.title,
+      owner: t.profiles?.full_name ?? "Unassigned",
+      ownerId: t.assignee_id,
+      since: t.due_date,
+      href: "/tasks",
+    });
+  }
+
+  // Oldest problem first: the longest-overdue task, then the unchased.
+  return out.sort((a, b) => (a.since ?? "9999").localeCompare(b.since ?? "9999"));
 }

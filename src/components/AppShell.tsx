@@ -16,6 +16,7 @@ const NAV = [
       { href: "/media-plan", label: "Media plan", icon: "M3 4h18v17H3zM3 9h18M8 2v4M16 2v4" },
       { href: "/creative", label: "Creative", icon: "M12 3 4 8v8l8 5 8-5V8zM12 12v9M4 8l8 4 8-4" },
       { href: "/tasks", label: "Tasks", icon: "M9 11l3 3 8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" },
+      { href: "/follow-ups", label: "Follow-ups", icon: "M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" },
     ],
   },
   {
