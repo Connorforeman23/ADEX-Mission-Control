@@ -14,6 +14,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import type { BarRow } from "@/components/BarList";
 import SpendReports, { type SpendCampaign } from "@/components/SpendReports";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export const dynamic = "force-dynamic";
 
@@ -105,11 +106,7 @@ export default async function ReportsPage() {
       <SpendReports campaigns={spendCampaigns} today={new Date().toISOString().slice(0, 10)} />
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Channel performance</h2>
-            <span className="sub">Leads attributed by share of spend</span>
-          </div>
+        <CollapsibleCard id="page-channel-performance" title="Channel performance" sub="Leads attributed by share of spend">
           <div className="card-body" style={{ padding: 0 }}>
             {spendRows.length === 0 || totalLeads === 0 ? (
               <p className="empty-note" style={{ padding: "18px 16px" }}>
@@ -157,14 +154,10 @@ export default async function ReportsPage() {
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Campaign performance</h2>
-          <span className="sub">Best cost per lead first</span>
-        </div>
+      <CollapsibleCard id="page-campaign-performance" title="Campaign performance" sub="Best cost per lead first">
         <div className="card-body" style={{ padding: 0 }}>
           {best.length === 0 ? (
             <p className="empty-note" style={{ padding: "18px 16px" }}>
@@ -216,7 +209,7 @@ export default async function ReportsPage() {
             </div>
           )}
         </div>
-      </section>
+      </CollapsibleCard>
     </div>
   );
 }

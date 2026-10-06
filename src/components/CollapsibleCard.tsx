@@ -12,14 +12,21 @@ import { useEffect, useState, type ReactNode } from "react";
 export default function CollapsibleCard({
   id,
   title,
+  titleNode,
   sub,
+  actions,
   defaultOpen = true,
   children,
 }: {
   /** Stable key for remembering this card's state. */
   id: string;
+  /** Plain text, used for the heading and the button label. */
   title: string;
+  /** Use when the heading is a link or carries markup; title still labels it. */
+  titleNode?: ReactNode;
   sub?: ReactNode;
+  /** Buttons that belong in the header — they stay visible when collapsed. */
+  actions?: ReactNode;
   defaultOpen?: boolean;
   children: ReactNode;
 }) {
@@ -50,8 +57,9 @@ export default function CollapsibleCard({
   return (
     <section className={open ? "card" : "card is-collapsed"}>
       <div className="card-head">
-        <h2>{title}</h2>
+        <h2>{titleNode ?? title}</h2>
         {sub && <span className="sub">{sub}</span>}
+        {actions && <span className="card-actions">{actions}</span>}
         <button
           type="button"
           className="card-toggle"

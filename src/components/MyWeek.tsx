@@ -15,6 +15,7 @@ import {
   type Campaign,
 } from "@/lib/money";
 import type { Lead, TaskRow } from "@/lib/queries";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 /**
  * The account manager's dashboard — everything is theirs.
@@ -134,21 +135,13 @@ export default function MyWeek({
       </div>
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Your tasks</h2>
-            <span className="sub">Soonest first · tick them here</span>
-          </div>
+        <CollapsibleCard id="myweek-your-tasks" title="Your tasks" sub="Soonest first · tick them here">
           <div className="card-body">
             <DashboardTasks tasks={sortedTasks.slice(0, 8)} today={today} />
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Needs you</h2>
-            <span className="sub">{stalled.length + lowMargin.length} open</span>
-          </div>
+        <CollapsibleCard id="myweek-needs-you" title="Needs you" sub={<>{stalled.length + lowMargin.length} open</>}>
           <div className="card-body">
             {stalled.length === 0 && lowMargin.length === 0 ? (
               <p className="empty-note">
@@ -186,15 +179,11 @@ export default function MyWeek({
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Starting soon</h2>
-            <span className="sub">Booked, next 14 days</span>
-          </div>
+        <CollapsibleCard id="myweek-starting-soon" title="Starting soon" sub="Booked, next 14 days">
           <div className="card-body">
             {startingSoon.length === 0 ? (
               <p className="empty-note">Nothing starting in the next fortnight.</p>
@@ -217,13 +206,9 @@ export default function MyWeek({
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Your pipeline</h2>
-            <span className="sub">{gbpK(pipelineValue)} in play</span>
-          </div>
+        <CollapsibleCard id="myweek-your-pipeline" title="Your pipeline" sub={<>{gbpK(pipelineValue)} in play</>}>
           <div className="card-body">
             {leads.length === 0 ? (
               <p className="empty-note">
@@ -244,14 +229,10 @@ export default function MyWeek({
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Your campaigns</h2>
-          <span className="sub">{openBook.length} open</span>
-        </div>
+      <CollapsibleCard id="myweek-your-campaigns" title="Your campaigns" sub={<>{openBook.length} open</>}>
         <div className="card-body" style={{ padding: openBook.length ? 0 : undefined }}>
           {openBook.length === 0 ? (
             <p className="empty-note">
@@ -310,7 +291,7 @@ export default function MyWeek({
             </div>
           )}
         </div>
-      </section>
+      </CollapsibleCard>
     </>
   );
 }

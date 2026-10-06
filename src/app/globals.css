@@ -497,3 +497,8 @@ td.num, th.num, td.r, th.r { white-space: nowrap; }
 /* Buttons used as row links (Documents on a campaign) shouldn't stretch
    the row height when several wrap onto two lines. */
 a.btn { line-height: 1.2; }
+
+/* Header buttons sit to the right of the title, before the minimise control. */
+.card-actions { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+.card-head .card-toggle { margin-left: 0; }
+.card-head > .sub + .card-toggle { margin-left: auto; }

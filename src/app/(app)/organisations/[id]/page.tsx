@@ -5,6 +5,7 @@ import OrgTimeline from "@/components/OrgTimeline";
 import { CUSTOMER_STATUS_LABEL } from "@/lib/organisations";
 import { dateGB, gbp, rangeGB, STATUS_LABEL } from "@/lib/money";
 import OrganisationActions from "@/components/OrganisationActions";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export const dynamic = "force-dynamic";
 
@@ -95,11 +96,7 @@ export default async function OrganisationPage({
       </div>
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Contacts</h2>
-            <span className="sub">{org.contacts.length}</span>
-          </div>
+        <CollapsibleCard id="page-contacts" title="Contacts" sub={<>{org.contacts.length}</>}>
           <div className="card-body">
             {org.contacts.length === 0 ? (
               <p className="empty-note">No contacts recorded for this organisation yet.</p>
@@ -118,13 +115,9 @@ export default async function OrganisationPage({
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Opportunities</h2>
-            <span className="sub">{org.opportunities.length}</span>
-          </div>
+        <CollapsibleCard id="page-opportunities" title="Opportunities" sub={<>{org.opportunities.length}</>}>
           <div className="card-body">
             {org.opportunities.length === 0 ? (
               <p className="empty-note">No opportunities logged against this organisation.</p>
@@ -143,14 +136,10 @@ export default async function OrganisationPage({
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Campaigns</h2>
-          <span className="sub">{org.campaigns.length}</span>
-        </div>
+      <CollapsibleCard id="page-campaigns" title="Campaigns" sub={<>{org.campaigns.length}</>}>
         <div className="card-body" style={{ padding: org.campaigns.length ? 0 : undefined }}>
           {org.campaigns.length === 0 ? (
             <p className="empty-note">No campaigns booked for this organisation.</p>
@@ -185,18 +174,12 @@ export default async function OrganisationPage({
             </div>
           )}
         </div>
-      </section>
+      </CollapsibleCard>
 
       <div className="cols">
         {(org.is_supplier || org.orders.length > 0) && (
-          <section className="card">
-            <div className="card-head">
-              <h2>Space Orders</h2>
-              <span className="sub">
-                {org.orders.length} bought from them
-                {org.orderEmail ? ` · orders go to ${org.orderEmail}` : " · no order address yet"}
-              </span>
-            </div>
+          <CollapsibleCard id="page-space-orders" title="Space Orders" sub={<>{org.orders.length} bought from them
+                {org.orderEmail ? ` · orders go to ${org.orderEmail}` : " · no order address yet"}</>}>
             <div className="card-body">
               {org.orders.length === 0 ? (
                 <p className="empty-note">Nothing booked with this supplier yet.</p>
@@ -221,14 +204,10 @@ export default async function OrganisationPage({
                 </div>
               )}
             </div>
-          </section>
+          </CollapsibleCard>
         )}
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Invoices</h2>
-            <span className="sub">{org.invoices.length}</span>
-          </div>
+        <CollapsibleCard id="page-invoices" title="Invoices" sub={<>{org.invoices.length}</>}>
           <div className="card-body">
             {org.invoices.length === 0 ? (
               <p className="empty-note">No client invoices raised.</p>
@@ -247,7 +226,7 @@ export default async function OrganisationPage({
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
 
       </div>
 

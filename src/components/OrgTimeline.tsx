@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import CollapsibleCard from "@/components/CollapsibleCard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { saveActivity, type ActivityInput } from "@/lib/actions";
@@ -95,22 +96,21 @@ export default function OrgTimeline({
   }
 
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Activity</h2>
-        <span className="sub">
+    <CollapsibleCard
+      id="org-activity"
+      title="Activity"
+      sub={
+        <>
           {entries.length} entr{entries.length === 1 ? "y" : "ies"}
           {hidden.length ? ` · ${shown.length} shown` : ""}
-        </span>
-        <button
-          className="btn btn-primary"
-          style={{ marginLeft: "auto" }}
-          onClick={() => setLogging((o) => !o)}
-        >
+        </>
+      }
+      actions={
+        <button className="btn btn-primary" onClick={() => setLogging((o) => !o)}>
           {logging ? "Cancel" : "Log activity"}
         </button>
-      </div>
-
+      }
+    >
       <div className="card-body">
         {logging && (
           <div className="form-grid" style={{ marginBottom: 16 }}>
@@ -255,6 +255,6 @@ export default function OrgTimeline({
           </div>
         )}
       </div>
-    </section>
+    </CollapsibleCard>
   );
 }
