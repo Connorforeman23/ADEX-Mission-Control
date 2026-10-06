@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Drawer from "@/components/Drawer";
+import CollapsibleCard from "@/components/CollapsibleCard";
 import { deleteContact, saveContact, type ContactInput } from "@/lib/actions";
 import { CUSTOMER_STATUS_CLASS, CUSTOMER_STATUS_LABEL } from "@/lib/organisations";
 
@@ -161,18 +162,21 @@ export default function ContactsPanel({
         [...orgs.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([org, people]) => {
           const status = people[0]?.organisationStatus;
           return (
-            <section className="card" key={org} style={{ marginBottom: 14 }}>
-              <div className="card-head">
-                <h2>
-                  {people[0]?.organisationId ? (
-                    <Link href={`/organisations/${people[0].organisationId}`} style={{ color: "inherit" }}>
-                      {org}
-                    </Link>
-                  ) : (
-                    org
-                  )}
-                </h2>
-                <span className="sub" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            <div key={org} style={{ marginBottom: 14 }}>
+            <CollapsibleCard
+              id={`contacts-${org}`}
+              title={org}
+              titleNode={
+                people[0]?.organisationId ? (
+                  <Link href={`/organisations/${people[0].organisationId}`} style={{ color: "inherit" }}>
+                    {org}
+                  </Link>
+                ) : (
+                  org
+                )
+              }
+              sub={
+                <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                   {people.length} contact{people.length === 1 ? "" : "s"}
                   {status && status !== "none" && (
                     <span className={`st ${CUSTOMER_STATUS_CLASS[status] ?? "done"}`}>
@@ -180,7 +184,8 @@ export default function ContactsPanel({
                     </span>
                   )}
                 </span>
-              </div>
+              }
+            >
               <div className="card-body" style={{ padding: 0 }}>
                 <div className="table-wrap">
                   <table>
@@ -234,7 +239,8 @@ export default function ContactsPanel({
                   </table>
                 </div>
               </div>
-            </section>
+            </CollapsibleCard>
+            </div>
           );
         })
       )}

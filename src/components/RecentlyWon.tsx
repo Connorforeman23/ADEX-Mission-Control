@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { clientGross, dateGB, gbp, repCommission, type Campaign } from "@/lib/money";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 /**
  * What's been won lately.
@@ -32,13 +33,7 @@ export default function RecentlyWon({
   const total = won.reduce((a, c) => a + clientGross(c), 0);
 
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Recently won</h2>
-        <span className="sub">
-          Last {days} days · {gbp(total)} ex VAT
-        </span>
-      </div>
+    <CollapsibleCard id="recentlywon-recently-won" title="Recently won" sub={<>Last {days} days · {gbp(total)} ex VAT</>}>
       <div className="card-body">
         {won.length === 0 ? (
           <p className="empty-note">Nothing won in the last {days} days.</p>
@@ -67,6 +62,6 @@ export default function RecentlyWon({
           </div>
         )}
       </div>
-    </section>
+    </CollapsibleCard>
   );
 }

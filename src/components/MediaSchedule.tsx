@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CHANNEL_COLOUR, channelLabel, dateShortGB, gbp, rangeGB } from "@/lib/money";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export type PlanLine = {
   id: string;
@@ -157,14 +158,8 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
         </span>
       </div>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Schedule</h2>
-          <span className="sub">
-            {weeksCount} weeks from {dateShortGB(gridStart.toISOString().slice(0, 10))} · bars show
-            in-market weeks
-          </span>
-        </div>
+      <CollapsibleCard id="mediaschedule-schedule" title="Schedule" sub={<>{weeksCount} weeks from {dateShortGB(gridStart.toISOString().slice(0, 10))} · bars show
+            in-market weeks</>}>
         <div className="card-body" style={{ padding: "12px 6px 6px" }}>
           {filtered.length === 0 ? (
             <p className="empty-note" style={{ padding: "12px 10px" }}>
@@ -233,7 +228,7 @@ export default function MediaSchedule({ lines, today }: { lines: PlanLine[]; tod
             </div>
           )}
         </div>
-      </section>
+      </CollapsibleCard>
 
       <style jsx>{`
         .sched {

@@ -18,6 +18,7 @@ import {
   supplierNet,
 } from "@/lib/money";
 import BarList, { type BarRow } from "@/components/BarList";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export const dynamic = "force-dynamic";
 
@@ -178,22 +179,14 @@ export default async function DashboardPage({
       </div>
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Billings by channel</h2>
-            <span className="sub">Client charge, ex VAT</span>
-          </div>
+        <CollapsibleCard id="page-billings-by-channel" title="Billings by channel" sub="Client charge, ex VAT">
           <div className="card-body">
             <BarList rows={channelRows} empty="No booking lines yet. Channel mix appears once campaigns are booked." />
           </div>
-        </section>
+        </CollapsibleCard>
 
         {mine ? (
-          <section className="card">
-            <div className="card-head">
-              <h2>Starting soon</h2>
-              <span className="sub">Booked, in the next fortnight</span>
-            </div>
+          <CollapsibleCard id="page-starting-soon" title="Starting soon" sub="Booked, in the next fortnight">
             <div className="card-body">
               {startingSoon.length === 0 ? (
                 <p className="empty-note">Nothing starting in the next two weeks.</p>
@@ -216,26 +209,18 @@ export default async function DashboardPage({
                 </div>
               )}
             </div>
-          </section>
+          </CollapsibleCard>
         ) : (
-          <section className="card">
-            <div className="card-head">
-              <h2>Billings by sales team</h2>
-              <span className="sub">Client gross per owner</span>
-            </div>
+          <CollapsibleCard id="page-billings-by-sales-team" title="Billings by sales team" sub="Client gross per owner">
             <div className="card-body">
               <BarList rows={salesRows} empty="No campaigns assigned yet." />
             </div>
-          </section>
+          </CollapsibleCard>
         )}
       </div>
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Live now</h2>
-            <span className="sub">In market this week</span>
-          </div>
+        <CollapsibleCard id="page-live-now" title="Live now" sub="In market this week">
           <div className="card-body" style={{ padding: 0 }}>
             {liveCampaigns.length ? (
               <div className="table-wrap">
@@ -279,15 +264,9 @@ export default async function DashboardPage({
               </p>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Needs attention</h2>
-            <span className="sub">
-              {variances.length + lowMargin.length + dueTasks.length + stalled.length} open
-            </span>
-          </div>
+        <CollapsibleCard id="page-needs-attention" title="Needs attention" sub={<>{variances.length + lowMargin.length + dueTasks.length + stalled.length} open</>}>
           <div className="card-body">
             {dueTasks.length > 0 && (
               <div className="rows" style={{ marginBottom: variances.length + lowMargin.length ? 8 : 0 }}>
@@ -359,7 +338,7 @@ export default async function DashboardPage({
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
       {campaigns.length === 0 && (

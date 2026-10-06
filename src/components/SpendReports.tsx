@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Segmented from "@/components/Segmented";
 import BarList, { type BarRow } from "@/components/BarList";
 import { CHANNEL_COLOUR, channelLabel, gbp, gbpK } from "@/lib/money";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 // The spend reports — by client, by assigned user, by channel, and the
 // client-by-user matrix — all driven by ONE set of controls, so the four
@@ -177,44 +178,28 @@ export default function SpendReports({ campaigns, today }: { campaigns: SpendCam
       </div>
 
       <div className="cols">
-        <section className="card">
-          <div className="card-head">
-            <h2>Spend by client</h2>
-            <span className="sub">{view.label}</span>
-          </div>
+        <CollapsibleCard id="spendreports-spend-by-client" title="Spend by client" sub={<>{view.label}</>}>
           <div className="card-body">
             <BarList rows={view.byClient} empty="Nothing in this period." />
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Spend by assigned user</h2>
-            <span className="sub">{view.label}</span>
-          </div>
+        <CollapsibleCard id="spendreports-spend-by-assigned-user" title="Spend by assigned user" sub={<>{view.label}</>}>
           <div className="card-body">
             <BarList rows={view.byOwner} empty="Nothing in this period." />
           </div>
-        </section>
+        </CollapsibleCard>
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Spend by channel</h2>
-            <span className="sub">{view.label}</span>
-          </div>
+        <CollapsibleCard id="spendreports-spend-by-channel" title="Spend by channel" sub={<>{view.label}</>}>
           <div className="card-body">
             <BarList rows={view.byChannel} empty="Nothing in this period." />
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
 
       {/* One column per team member, so this one needs the full width. */}
       <div style={{ marginBottom: 14 }}>
-        <section className="card">
-          <div className="card-head">
-            <h2>Client by assigned user</h2>
-            <span className="sub">{gbpK(view.grand)} · {view.label}</span>
-          </div>
+        <CollapsibleCard id="spendreports-client-by-assigned-user" title="Client by assigned user" sub={<>{gbpK(view.grand)} · {view.label}</>}>
           <div className="card-body" style={{ padding: 0 }}>
             {view.matrix.length === 0 ? (
               <p className="empty-note" style={{ padding: "18px 16px" }}>
@@ -265,7 +250,7 @@ export default function SpendReports({ campaigns, today }: { campaigns: SpendCam
               </div>
             )}
           </div>
-        </section>
+        </CollapsibleCard>
       </div>
     </>
   );

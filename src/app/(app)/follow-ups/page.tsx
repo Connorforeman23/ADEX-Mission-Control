@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { dateGB } from "@/lib/money";
 import { getFollowUpExceptions, getMyProfile } from "@/lib/queries";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export const dynamic = "force-dynamic";
 
@@ -76,11 +77,7 @@ export default async function FollowUpsPage({
         ))}
       </div>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>No next action</h2>
-          <span className="sub">Park one to set it aside deliberately</span>
-        </div>
+      <CollapsibleCard id="page-no-next-action" title="No next action" sub="Park one to set it aside deliberately">
         <div className="card-body" style={{ padding: unchased.length ? 0 : undefined }}>
           {unchased.length === 0 ? (
             <p className="empty-note">
@@ -119,13 +116,10 @@ export default async function FollowUpsPage({
             </div>
           )}
         </div>
-      </section>
+      </CollapsibleCard>
 
-      <section className="card" style={{ marginTop: 14 }}>
-        <div className="card-head">
-          <h2>Overdue</h2>
-          <span className="sub">{overdue.length} past their date</span>
-        </div>
+      <CollapsibleCard id="page-overdue" title="Overdue" sub={<>{overdue.length} past their date</>}>
+        {/* was: style={{ marginTop: 14 }} */}
         <div className="card-body" style={{ padding: overdue.length ? 0 : undefined }}>
           {overdue.length === 0 ? (
             <p className="empty-note">Nothing overdue.</p>
@@ -176,7 +170,7 @@ export default async function FollowUpsPage({
             </div>
           )}
         </div>
-      </section>
+      </CollapsibleCard>
     </div>
   );
 }
