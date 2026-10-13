@@ -78,9 +78,9 @@ export async function testMicrosoft(): Promise<
       "/me/events?$top=5&$select=subject,start"
     );
 
-    const supabase = await createClient();
-    await supabase.rpc("ms_mark_synced");
-
+    // Deliberately does NOT mark the connection as synced: this reads five
+    // messages and keeps none, so recording it as a sync would make the next
+    // real sync think it had already caught up and skip three months of mail.
     const latest = mail.value?.[0];
     return {
       ok: true,

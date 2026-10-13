@@ -54,7 +54,7 @@ export default function MicrosoftPanel() {
   }
 
   async function sync(days?: number) {
-    setBusy("sync");
+    setBusy(days ? "resync" : "sync");
     setError(null);
     setNotice(null);
     const res = await syncMail(days);
@@ -105,6 +105,14 @@ export default function MicrosoftPanel() {
               </div>
               <button className="btn btn-primary" onClick={() => sync()} disabled={!!busy}>
                 {busy === "sync" ? "Reading your mailbox…" : "Sync my mail"}
+              </button>
+              <button
+                className="btn"
+                onClick={() => sync(90)}
+                disabled={!!busy}
+                title="Read the last three months again — useful after adding companies to the CRM"
+              >
+                {busy === "resync" ? "Reading…" : "Re-read 3 months"}
               </button>
               <button className="btn" onClick={test} disabled={!!busy}>
                 {busy === "test" ? "Checking…" : "Test"}
