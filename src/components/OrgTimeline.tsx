@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import CollapsibleCard from "@/components/CollapsibleCard";
+import EmailThread from "@/components/EmailThread";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { saveActivity, type ActivityInput } from "@/lib/actions";
@@ -51,6 +52,8 @@ export default function OrgTimeline({
   const router = useRouter();
   const [hidden, setHidden] = useState<string[]>([]);
   const [logging, setLogging] = useState(false);
+  // The email being read in full, in its own panel.
+  const [reading, setReading] = useState<TimelineEntry | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -234,7 +237,19 @@ export default function OrgTimeline({
                 </span>
                 <div className="grow">
                   <p>
-                    {e.href ? (
+                    {e.email ? (
+                      // Reading it in place beats bouncing to Outlook, so an
+                      // email opens the whole conversation here instead.
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => setReading(e)}
+                        style={{ color: "var(--blue)" }}
+                      >
+                        {e.summary}
+                        {e.email.threadCount > 1 ? ` · ${e.email.threadCount} in thread` : ""}
+                      </button>
+                    ) : e.href ? (
                       <Link href={e.href} style={{ color: "var(--blue)" }}>
                         {e.summary}
                       </Link>
@@ -255,6 +270,7 @@ export default function OrgTimeline({
           </div>
         )}
       </div>
+      <EmailThread open={reading} entries={entries} onClose={() => setReading(null)} />
     </CollapsibleCard>
   );
 }

@@ -516,14 +516,15 @@ export async function saveTask(input: TaskInput) {
     created_by: user.id,
   };
 
-  const { error } = input.id
-    ? await supabase.from("tasks").update(row).eq("id", input.id)
-    : await supabase.from("tasks").insert(row);
+  const { data, error } = input.id
+    ? await supabase.from("tasks").update(row).eq("id", input.id).select("id").single()
+    : await supabase.from("tasks").insert(row).select("id").single();
 
   if (error) return { error: error.message };
   revalidatePath("/tasks");
   revalidatePath("/");
-  return {};
+  // Returned so the caller can put a timed task into Outlook.
+  return { taskId: (data as { id: string } | null)?.id };
 }
 
 export async function toggleTask(id: string, done: boolean) {

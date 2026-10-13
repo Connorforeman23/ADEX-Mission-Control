@@ -923,7 +923,7 @@ export async function getOrganisationTimeline(
 ): Promise<TimelineEntry[]> {
   const supabase = await createClient();
 
-  const [actsRes, tasksRes, histRes] = await Promise.all([
+  const [actsRes, tasksRes, histRes, mailRes, meetRes] = await Promise.all([
     supabase
       .from("activities")
       .select("id, kind, happened_at, summary, detail, campaign_id, profiles ( full_name )")
@@ -942,6 +942,20 @@ export async function getOrganisationTimeline(
       .select("id, old_status, new_status, changed_at, reason, profiles ( full_name )")
       .eq("organisation_id", organisationId)
       .order("changed_at", { ascending: false })
+      .limit(limit),
+    supabase
+      .from("emails")
+      .select(
+        "id, subject, preview, body, from_name, from_email, to_emails, cc_emails, sent_at, direction, web_link, conversation_id"
+      )
+      .eq("organisation_id", organisationId)
+      .order("sent_at", { ascending: false })
+      .limit(limit),
+    supabase
+      .from("meetings")
+      .select("id, subject, starts_at, location, attendees, web_link")
+      .eq("organisation_id", organisationId)
+      .order("starts_at", { ascending: false })
       .limit(limit),
   ]);
 
@@ -1007,6 +1021,72 @@ export async function getOrganisationTimeline(
       detail: h.reason,
       who: h.profiles?.full_name ?? "—",
       href: null,
+    });
+  }
+
+  const mail = (mailRes.data ?? []) as unknown as {
+    id: string;
+    subject: string | null;
+    preview: string | null;
+    body: string | null;
+    from_name: string | null;
+    from_email: string | null;
+    to_emails: string[] | null;
+    cc_emails: string[] | null;
+    sent_at: string;
+    direction: string;
+    web_link: string | null;
+    conversation_id: string | null;
+  }[];
+
+  // How long each conversation is, so a message can say "3 in this thread"
+  // without a second query per row.
+  const threadSize = new Map<string, number>();
+  for (const m of mail) {
+    if (m.conversation_id) {
+      threadSize.set(m.conversation_id, (threadSize.get(m.conversation_id) ?? 0) + 1);
+    }
+  }
+
+  for (const m of mail) {
+    entries.push({
+      id: `e-${m.id}`,
+      kind: "Email",
+      at: m.sent_at,
+      summary: m.subject || "(no subject)",
+      detail: m.preview,
+      // Who it was with, and which way it went.
+      who: `${m.direction === "out" ? "To" : "From"} ${m.from_name || m.from_email || "—"}`,
+      // Opens the real message in the reader's own Outlook.
+      href: m.web_link,
+      email: {
+        conversationId: m.conversation_id,
+        from: m.from_name ? `${m.from_name} <${m.from_email ?? ""}>` : m.from_email ?? "—",
+        to: m.to_emails ?? [],
+        cc: m.cc_emails ?? [],
+        direction: m.direction,
+        body: m.body,
+        threadCount: m.conversation_id ? threadSize.get(m.conversation_id) ?? 1 : 1,
+      },
+    });
+  }
+
+  for (const v of (meetRes.data ?? []) as unknown as {
+    id: string;
+    subject: string | null;
+    starts_at: string;
+    location: string | null;
+    attendees: string[] | null;
+    web_link: string | null;
+  }[]) {
+    entries.push({
+      id: `m-${v.id}`,
+      kind: "Meeting",
+      at: v.starts_at,
+      summary: v.subject || "(no subject)",
+      detail: v.location,
+      who: (v.attendees ?? []).join(", ") || "—",
+      href: v.web_link,
     });
   }
 
