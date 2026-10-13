@@ -94,3 +94,31 @@ export async function testMicrosoft(): Promise<
     return { ok: false, error: e instanceof Error ? e.message : "Could not reach Microsoft." };
   }
 }
+
+/**
+ * Pull this person's recent mail and file what belongs to a client or supplier.
+ *
+ * User-triggered, deliberately: it runs as them, with their token, under their
+ * session. Nothing reads anyone's mailbox when they are not signed in, which is
+ * what keeps the CRM's "no god-mode key" property intact.
+ */
+export async function syncMail(sinceDays?: number): Promise<
+  { ok: true; message: string } | { ok: false; error: string }
+> {
+  try {
+    const { syncMyMail } = await import("@/lib/mail-sync");
+    const r = await syncMyMail(sinceDays);
+    revalidatePath("/settings");
+    return {
+      ok: true,
+      message:
+        `Read ${r.read} message${r.read === 1 ? "" : "s"} since ${new Date(r.since).toLocaleDateString("en-GB")}. ` +
+        `Filed ${r.filed} against a company; ignored ${r.skipped} as internal or unrecognised.` +
+        (r.filed === 0 && r.read > 0
+          ? " Nothing matched — that usually means the companies aren't in the CRM yet, or their contacts have no email addresses."
+          : ""),
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not read your mailbox." };
+  }
+}

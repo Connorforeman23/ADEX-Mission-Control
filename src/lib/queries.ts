@@ -923,7 +923,7 @@ export async function getOrganisationTimeline(
 ): Promise<TimelineEntry[]> {
   const supabase = await createClient();
 
-  const [actsRes, tasksRes, histRes] = await Promise.all([
+  const [actsRes, tasksRes, histRes, mailRes] = await Promise.all([
     supabase
       .from("activities")
       .select("id, kind, happened_at, summary, detail, campaign_id, profiles ( full_name )")
@@ -942,6 +942,12 @@ export async function getOrganisationTimeline(
       .select("id, old_status, new_status, changed_at, reason, profiles ( full_name )")
       .eq("organisation_id", organisationId)
       .order("changed_at", { ascending: false })
+      .limit(limit),
+    supabase
+      .from("emails")
+      .select("id, subject, preview, from_name, from_email, sent_at, direction, web_link")
+      .eq("organisation_id", organisationId)
+      .order("sent_at", { ascending: false })
       .limit(limit),
   ]);
 
@@ -1007,6 +1013,29 @@ export async function getOrganisationTimeline(
       detail: h.reason,
       who: h.profiles?.full_name ?? "—",
       href: null,
+    });
+  }
+
+  for (const m of (mailRes.data ?? []) as unknown as {
+    id: string;
+    subject: string | null;
+    preview: string | null;
+    from_name: string | null;
+    from_email: string | null;
+    sent_at: string;
+    direction: string;
+    web_link: string | null;
+  }[]) {
+    entries.push({
+      id: `e-${m.id}`,
+      kind: "Email",
+      at: m.sent_at,
+      summary: m.subject || "(no subject)",
+      detail: m.preview,
+      // Who it was with, and which way it went.
+      who: `${m.direction === "out" ? "To" : "From"} ${m.from_name || m.from_email || "—"}`,
+      // Opens the real message in the reader's own Outlook.
+      href: m.web_link,
     });
   }
 

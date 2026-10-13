@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CollapsibleCard from "@/components/CollapsibleCard";
-import { disconnectMicrosoft, getMsStatus, testMicrosoft } from "@/lib/ms-actions";
+import { disconnectMicrosoft, getMsStatus, syncMail, testMicrosoft } from "@/lib/ms-actions";
 import type { MsStatus } from "@/lib/ms-types";
 
 // Everyone's own Microsoft 365 connection, on Settings.
@@ -53,6 +53,17 @@ export default function MicrosoftPanel() {
     setStatus(await getMsStatus());
   }
 
+  async function sync(days?: number) {
+    setBusy("sync");
+    setError(null);
+    setNotice(null);
+    const res = await syncMail(days);
+    setBusy(null);
+    if (!res.ok) return setError(res.error);
+    setNotice(res.message);
+    setStatus(await getMsStatus());
+  }
+
   async function test() {
     setBusy("test");
     setError(null);
@@ -92,12 +103,22 @@ export default function MicrosoftPanel() {
                   {when(status.lastSyncAt)}
                 </small>
               </div>
+              <button className="btn btn-primary" onClick={() => sync()} disabled={!!busy}>
+                {busy === "sync" ? "Reading your mailbox…" : "Sync my mail"}
+              </button>
               <button className="btn" onClick={test} disabled={!!busy}>
-                {busy === "test" ? "Checking…" : "Test the connection"}
+                {busy === "test" ? "Checking…" : "Test"}
               </button>
               <button className="btn" onClick={disconnect} disabled={!!busy}>
                 {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
               </button>
+            </div>
+            <div className="row">
+              <small className="sub-line">
+                Only mail involving a company already in the CRM is kept — never internal or
+                personal mail. The first sync reaches back three months; after that it picks up
+                what has arrived since.
+              </small>
             </div>
           </div>
         ) : (

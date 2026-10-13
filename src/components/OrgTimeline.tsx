@@ -235,9 +235,22 @@ export default function OrgTimeline({
                 <div className="grow">
                   <p>
                     {e.href ? (
-                      <Link href={e.href} style={{ color: "var(--blue)" }}>
-                        {e.summary}
-                      </Link>
+                      // An Outlook link leaves the CRM, so it opens in its own
+                      // tab rather than taking the page with it.
+                      e.href.startsWith("http") ? (
+                        <a
+                          href={e.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: "var(--blue)" }}
+                        >
+                          {e.summary} ↗
+                        </a>
+                      ) : (
+                        <Link href={e.href} style={{ color: "var(--blue)" }}>
+                          {e.summary}
+                        </Link>
+                      )
                     ) : (
                       e.summary
                     )}
