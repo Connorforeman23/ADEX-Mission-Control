@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CollapsibleCard from "@/components/CollapsibleCard";
-import { disconnectMicrosoft, getMsStatus, syncMail, testMicrosoft } from "@/lib/ms-actions";
+import {
+  disconnectMicrosoft,
+  getMsStatus,
+  syncMail,
+  syncMeetings,
+  testMicrosoft,
+} from "@/lib/ms-actions";
 import type { MsStatus } from "@/lib/ms-types";
 
 // Everyone's own Microsoft 365 connection, on Settings.
@@ -64,6 +70,16 @@ export default function MicrosoftPanel() {
     setStatus(await getMsStatus());
   }
 
+  async function meetings() {
+    setBusy("meetings");
+    setError(null);
+    setNotice(null);
+    const res = await syncMeetings();
+    setBusy(null);
+    if (!res.ok) return setError(res.error);
+    setNotice(res.message);
+  }
+
   async function test() {
     setBusy("test");
     setError(null);
@@ -114,6 +130,9 @@ export default function MicrosoftPanel() {
               >
                 {busy === "resync" ? "Reading…" : "Re-read 3 months"}
               </button>
+              <button className="btn" onClick={meetings} disabled={!!busy}>
+                {busy === "meetings" ? "Reading…" : "Sync meetings"}
+              </button>
               <button className="btn" onClick={test} disabled={!!busy}>
                 {busy === "test" ? "Checking…" : "Test"}
               </button>
@@ -123,9 +142,10 @@ export default function MicrosoftPanel() {
             </div>
             <div className="row">
               <small className="sub-line">
-                Only mail involving a company already in the CRM is kept — never internal or
-                personal mail. The first sync reaches back three months; after that it picks up
-                what has arrived since.
+                Only mail and meetings involving a company already in the CRM are kept — never
+                internal or personal. The first sync reaches back three months; after that it
+                picks up what has arrived since. Give a task a time and it appears in your own
+                Outlook calendar.
               </small>
             </div>
           </div>

@@ -14,6 +14,7 @@ import {
   type ActivityInput,
   type TaskInput,
 } from "@/lib/actions";
+import { syncTaskToCalendar } from "@/lib/ms-actions";
 import type { TaskRow } from "@/lib/queries";
 
 const TASK_TYPES = ["Chase", "Prep", "Admin", "Meeting"] as const;
@@ -94,12 +95,26 @@ export default function TasksPanel({
   ).length;
   const parkedCount = tasks.filter((t) => t.status === "Parked").length;
 
+  const [calendarNote, setCalendarNote] = useState<string | null>(null);
+
   async function save() {
     if (!editing) return;
     setBusy(true);
     const res = await saveTask(editing);
+    if (res.error) {
+      setBusy(false);
+      return setError(res.error);
+    }
+    // A timed task belongs in Outlook — but a calendar that didn't update must
+    // never lose someone's task, so this follows the save rather than gating it.
+    if (res.taskId) {
+      const cal = await syncTaskToCalendar(res.taskId);
+      if (cal.message) {
+        setCalendarNote(cal.message);
+        setTimeout(() => setCalendarNote(null), 4000);
+      }
+    }
     setBusy(false);
-    if (res.error) return setError(res.error);
     setEditing(null);
     router.refresh();
   }
@@ -411,6 +426,9 @@ export default function TasksPanel({
             </div>
 
             {error && <p style={{ color: "var(--crit)", fontSize: 12.5, margin: 0 }}>{error}</p>}
+      {calendarNote && (
+        <p style={{ color: "var(--ok)", fontSize: 12.5, margin: 0 }}>{calendarNote}</p>
+      )}
 
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn btn-primary" onClick={finish} disabled={busy}>

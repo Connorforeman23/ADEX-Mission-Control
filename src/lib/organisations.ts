@@ -144,6 +144,21 @@ export type TimelineEntry = {
   who: string;
   /** Where clicking it goes, when there is somewhere to go. */
   href: string | null;
+  /** Set on an email: everything needed to read it in full, in place. */
+  email?: EmailDetail;
+};
+
+export type EmailDetail = {
+  /** Microsoft's thread id — what groups a conversation together. */
+  conversationId: string | null;
+  from: string;
+  to: string[];
+  cc: string[];
+  /** 'in' when it came from outside, 'out' when ADEX sent it. */
+  direction: string;
+  body: string | null;
+  /** How many messages are in this conversation, this one included. */
+  threadCount: number;
 };
 
 /** The filter chips above the timeline. */

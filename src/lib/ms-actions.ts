@@ -122,3 +122,83 @@ export async function syncMail(sinceDays?: number): Promise<
     return { ok: false, error: e instanceof Error ? e.message : "Could not read your mailbox." };
   }
 }
+
+/**
+ * Put a timed task into the person's own Outlook calendar — or take it out
+ * when the time is removed, or the task is done.
+ *
+ * Called after a task is saved, and deliberately forgiving: a calendar that
+ * didn't update must never stop a task being saved. It reports what happened
+ * so the UI can say so, and says nothing when there was nothing to do.
+ */
+export async function syncTaskToCalendar(taskId: string): Promise<{ message: string | null }> {
+  if (!msConfigured()) return { message: null };
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("tasks")
+      .select("id, title, notes, due_date, due_time, status, ms_event_id")
+      .eq("id", taskId)
+      .maybeSingle();
+    if (!data) return { message: null };
+
+    const t = data as {
+      id: string;
+      title: string;
+      notes: string | null;
+      due_date: string | null;
+      due_time: string | null;
+      status: string;
+      ms_event_id: string | null;
+    };
+
+    const { upsertTaskEvent, removeTaskEvent } = await import("@/lib/calendar-sync");
+
+    // No time, or finished with it — the calendar entry has no reason to exist.
+    const wanted = t.status === "Open" && !!t.due_date && !!t.due_time;
+    if (!wanted) {
+      if (t.ms_event_id) {
+        await removeTaskEvent(t.ms_event_id);
+        await supabase.from("tasks").update({ ms_event_id: null }).eq("id", t.id);
+        return { message: "Removed from your Outlook calendar." };
+      }
+      return { message: null };
+    }
+
+    const eventId = await upsertTaskEvent({
+      id: t.id,
+      title: t.title,
+      notes: t.notes,
+      due_date: t.due_date!,
+      due_time: t.due_time!,
+      ms_event_id: t.ms_event_id,
+    });
+    if (eventId !== t.ms_event_id) {
+      await supabase.from("tasks").update({ ms_event_id: eventId }).eq("id", t.id);
+    }
+    return { message: t.ms_event_id ? "Updated in your Outlook calendar." : "Added to your Outlook calendar." };
+  } catch (e) {
+    // Never let a calendar problem lose someone's task.
+    console.error("syncTaskToCalendar", e instanceof Error ? e.message : e);
+    return { message: null };
+  }
+}
+
+/** Read meetings back from Outlook and file the ones with a known company. */
+export async function syncMeetings(): Promise<
+  { ok: true; message: string } | { ok: false; error: string }
+> {
+  try {
+    const { syncMyMeetings } = await import("@/lib/calendar-sync");
+    const r = await syncMyMeetings();
+    revalidatePath("/settings");
+    return {
+      ok: true,
+      message:
+        `Read ${r.read} calendar entr${r.read === 1 ? "y" : "ies"}. ` +
+        `Filed ${r.filed} against a company; ignored ${r.skipped} as internal or unrecognised.`,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not read your calendar." };
+  }
+}
