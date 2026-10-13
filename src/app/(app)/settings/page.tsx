@@ -7,6 +7,7 @@ import { SUPPLIERS_BY_CHANNEL } from "@/lib/reference";
 import TeamAdmin from "@/components/TeamAdmin";
 import ActivityLog from "@/components/ActivityLog";
 import XeroPanel from "@/components/XeroPanel";
+import MicrosoftPanel from "@/components/MicrosoftPanel";
 import CollapsibleCard from "@/components/CollapsibleCard";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +98,9 @@ export default async function SettingsPage() {
 
       {isAdmin && (
         <Suspense fallback={null}>
-          <XeroPanel />
+          <MicrosoftPanel />
+
+        <XeroPanel />
         </Suspense>
       )}
 
