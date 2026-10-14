@@ -96,11 +96,17 @@ export default async function SettingsPage() {
 
       {isAdmin && <TeamAdmin />}
 
+      {/* Everyone connects their OWN mailbox and calendar — this is not an
+          admin setting, and hiding it was why the team could not find it. */}
+      <Suspense fallback={null}>
+        <MicrosoftPanel />
+      </Suspense>
+
+      {/* Xero is one connection to one set of company books, so it stays
+          admin-only. */}
       {isAdmin && (
         <Suspense fallback={null}>
-          <MicrosoftPanel />
-
-        <XeroPanel />
+          <XeroPanel />
         </Suspense>
       )}
 
@@ -135,29 +141,6 @@ export default async function SettingsPage() {
           </div>
         </CollapsibleCard>
 
-        <CollapsibleCard id="connections" title="Connections" sub="None live yet">
-          <div className="card-body">
-            <div className="rows">
-              {[
-                ["Xero", "POs push as bills; invoices drafted at client gross"],
-                ["Google Ads reporting", "Pulls spend and conversions into Reports"],
-                ["Meta reporting", "Pulls spend and leads into Reports"],
-                ["Email (SMTP)", "Password resets and notifications from your own domain"],
-              ].map(([name, detail]) => (
-                <div className="row" key={name}>
-                  <div className="grow">
-                    <p>{name}</p>
-                    <small>{detail}</small>
-                  </div>
-                  <span className="st done">Not connected</span>
-                </div>
-              ))}
-            </div>
-            <p className="sub-line" style={{ marginTop: 10 }}>
-              Each of these is a real integration to build — nothing here is wired up yet.
-            </p>
-          </div>
-        </CollapsibleCard>
       </div>
 
       <CollapsibleCard
