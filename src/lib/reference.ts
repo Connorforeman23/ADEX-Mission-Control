@@ -11,7 +11,7 @@ const alphabetical = (lists: Record<string, string[]>) =>
 export const SUPPLIERS_BY_CHANNEL: Record<string, string[]> = alphabetical({
   Digital: [
     "Plug Media", "Sabio", "Readpeak", "MMM", "News UK", "Reach", "Google", "Meta",
-    "Amazon", "LinkedIn", "ITV", "Ozone", "LG", "Samsung", "GPM360",
+    "Amazon", "LinkedIn", "ITV", "Ozone", "LG", "Samsung", "GPM360", "The Knowledge",
   ],
   TV: ["ITV", "Sky", "C4", "C5", "UKTV", "Axiom", "Sabio", "Plug", "Media15", "LG", "Samsung", "GPM360"],
   Radio: ["Global", "Bauer", "News Broadcasting", "DAX (Global)", "Communicorp", "Fix Radio", "Boom Radio", "Gaydio"],
