@@ -1345,6 +1345,9 @@ async function syncSpaceOrders(
       p_name: g.vendor,
       p_sector: null,
       p_owner: null,
+      // A media owner is not someone we are selling to, so it must not
+      // arrive as a prospect and show up in the client dropdown.
+      p_status: "none",
     });
     if (supplierOrgId) {
       await supabase
