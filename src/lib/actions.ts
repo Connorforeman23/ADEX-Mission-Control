@@ -1911,3 +1911,55 @@ export async function deleteProposal(id: string) {
   revalidatePath("/proposals");
   return {};
 }
+
+/**
+ * Build a proposal's slides from a written brief.
+ *
+ * Connor writes the deck through in a chat and pastes the result; the form
+ * per slide is the part nobody wants to do. The brief is read here rather
+ * than in the browser so the parser stays next to the prompt it has to match.
+ *
+ * `replace` is the honest default for a draft that has never been touched;
+ * appending is for adding a section to a deck already written.
+ */
+export async function buildProposalFromBrief(
+  id: string,
+  brief: string,
+  mode: "replace" | "append" = "replace"
+) {
+  const supabase = await createClient();
+  const { parseBrief } = await import("@/lib/proposal-brief");
+  const { slides, warnings } = parseBrief(brief);
+
+  if (!slides.length) {
+    return {
+      error:
+        warnings[0] ??
+        "Nothing in that brief looked like a slide. Headings start with # or ##.",
+    };
+  }
+
+  const { data: current, error: readError } = await supabase
+    .from("proposals")
+    .select("content, kind")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!current) return { error: "That proposal no longer exists." };
+  if (current.kind !== "deck") {
+    return { error: "This proposal is an email offer — a brief builds slides." };
+  }
+
+  const content = (current.content ?? {}) as { slides?: unknown[] };
+  const existing = Array.isArray(content.slides) ? (content.slides as typeof slides) : [];
+  const next = mode === "append" ? [...existing, ...slides] : slides;
+
+  const { error } = await supabase
+    .from("proposals")
+    .update({ content: { ...content, slides: next } })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/proposals/${id}`);
+  return { built: slides.length, warnings };
+}

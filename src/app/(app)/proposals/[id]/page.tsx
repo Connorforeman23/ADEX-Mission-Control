@@ -5,6 +5,7 @@ import { dateGB } from "@/lib/money";
 import { KIND_LABEL, STATUS_CLASS } from "@/lib/proposals";
 import ProposalActions from "@/components/ProposalActions";
 import ProposalEditor from "@/components/ProposalEditor";
+import BuildFromBrief from "@/components/BuildFromBrief";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,10 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
             </p>
           </div>
         </section>
+      )}
+
+      {proposal.kind === "deck" && (
+        <BuildFromBrief id={proposal.id} hasSlides={proposal.slideCount > 0} />
       )}
 
       <ProposalEditor

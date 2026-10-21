@@ -76,9 +76,33 @@ function fitted(dataUri: string, x: number, y: number, w: number, h: number) {
 
 // --- the pieces ----------------------------------------------------------
 
-/** Eyebrow in pink caps, headline in bold navy, optional standfirst. */
-function heading(slide: PptxGenJS.Slide, s: SlideSpec, dark: boolean) {
+/**
+ * Roughly how many lines a string takes in a box of this width.
+ *
+ * PowerPoint does the real wrapping, so this only has to be close enough to
+ * stop a long headline sitting on top of the content below it. The constant
+ * is Calibri's average advance width as a fraction of its point size,
+ * measured against headlines that actually wrapped.
+ */
+function wrappedLines(text: string, widthIn: number, fontSize: number) {
+  const perLine = Math.max(8, Math.floor(widthIn / (fontSize * 0.0064)));
+  return text
+    .split("\n")
+    .reduce((n, para) => n + Math.max(1, Math.ceil(para.length / perLine)), 0);
+}
+
+/**
+ * Eyebrow in pink caps, headline in bold navy, optional standfirst.
+ *
+ * Returns the y the content may start at. A two-line headline used to be
+ * drawn over the top of whatever came next, because the content always began
+ * at a fixed height — which only looked right while every headline was short.
+ */
+function heading(slide: PptxGenJS.Slide, s: SlideSpec, dark: boolean): number {
   const ink = dark ? BRAND.white : BRAND.ink;
+  const textW = W - M * 2 - 1.5;
+  const headTop = s.eyebrow ? 0.72 : 0.52;
+  const headH = wrappedLines(s.headline, textW, 31) * 0.52;
   if (s.eyebrow) {
     slide.addText(s.eyebrow.toUpperCase(), {
       x: M,
@@ -96,9 +120,9 @@ function heading(slide: PptxGenJS.Slide, s: SlideSpec, dark: boolean) {
   }
   slide.addText(s.headline, {
     x: M,
-    y: s.eyebrow ? 0.72 : 0.52,
-    w: W - M * 2 - 1.5,
-    h: 0.7,
+    y: headTop,
+    w: textW,
+    h: Math.max(0.7, headH),
     isTextBox: true,
     margin: 0,
     fontFace: FONTS.heading,
@@ -107,19 +131,24 @@ function heading(slide: PptxGenJS.Slide, s: SlideSpec, dark: boolean) {
     color: ink,
     valign: "top",
   });
+
+  let bottom = headTop + Math.max(0.7, headH);
   if (s.standfirst) {
+    const sfH = wrappedLines(s.standfirst, textW, 13) * 0.23;
     slide.addText(s.standfirst, {
       x: M,
-      y: 1.44,
-      w: W - M * 2 - 1.5,
-      h: 0.34,
+      y: bottom + 0.04,
+      w: textW,
+      h: Math.max(0.34, sfH),
       isTextBox: true,
       margin: 0,
       fontFace: FONTS.body,
       fontSize: 13,
       color: dark ? BRAND.line : BRAND.slate,
     });
+    bottom += 0.04 + Math.max(0.34, sfH);
   }
+  return bottom + 0.3;
 }
 
 /**
@@ -656,9 +685,12 @@ export async function buildProposalDeck(deck: DeckSpec): Promise<Buffer> {
     // --- content ---------------------------------------------------------
     page++;
     mark(slide, brandMark, false);
-    heading(slide, s, false);
+    const headBottom = heading(slide, s, false);
 
-    let y = s.standfirst ? HEAD_BOTTOM + 0.22 : HEAD_BOTTOM;
+    // The old fixed start is the floor, so slides with a one-line headline sit
+    // exactly where they always did; a longer headline pushes the content down
+    // rather than being drawn over it.
+    let y = Math.max(s.standfirst ? HEAD_BOTTOM + 0.22 : HEAD_BOTTOM, headBottom);
 
     if (s.figures?.length) {
       figures(slide, s.figures, M, y, W - M * 2 - 1.2, false);
