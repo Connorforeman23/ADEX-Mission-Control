@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { gbpK } from "@/lib/money";
 import PipelineBoard, { type LeadRow } from "@/components/PipelineBoard";
@@ -69,6 +70,9 @@ export default async function PipelinePage({
             is kept but never counted toward any projection.
           </p>
         </div>
+        <Link className="btn" href="/proposals">
+          Proposals
+        </Link>
       </div>
 
       <div className="kpis">

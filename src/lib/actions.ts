@@ -1718,3 +1718,196 @@ export async function removeOrganisationLogo(organisationId: string) {
   revalidatePath("/organisations");
   return {};
 }
+
+// --- proposals (Phase 8) -------------------------------------------------
+
+export type ProposalInput = {
+  title: string;
+  organisationId: string;
+  /** Blank when the proposal is not tied to an opportunity. */
+  leadId: string;
+  kind: string;
+  ownerId: string;
+};
+
+/**
+ * Start a proposal. Which starting point it gets depends on the kind: a deck
+ * gets the ADEX spine with the blanks left blank, an email offer gets a
+ * greeting. Nothing is invented on the client's behalf.
+ */
+export async function createProposal(input: ProposalInput) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const title = input.title.trim();
+  if (!title) return { error: "Give the proposal a title." };
+  if (!input.organisationId) return { error: "Choose the company it is for." };
+
+  const { data: org } = await supabase
+    .from("organisations")
+    .select("name")
+    .eq("id", input.organisationId)
+    .maybeSingle();
+  const client = org?.name ?? "";
+
+  const kind = input.kind === "email" ? "email" : "deck";
+  const { starterDeck, starterEmail } = await import("@/lib/proposals");
+  const content = kind === "deck" ? starterDeck(client, title) : starterEmail(client, title);
+
+  const { data, error } = await supabase
+    .from("proposals")
+    .insert({
+      title,
+      organisation_id: input.organisationId,
+      lead_id: input.leadId || null,
+      kind,
+      content,
+      owner_id: input.ownerId || user?.id || null,
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  revalidatePath("/proposals");
+  return { id: data.id as string };
+}
+
+/** Rename, retitle, re-own, or rewrite the content. */
+export async function saveProposal(
+  id: string,
+  patch: { title?: string; ownerId?: string; leadId?: string | null; content?: unknown }
+) {
+  const supabase = await createClient();
+  const update: Record<string, unknown> = {};
+  if (patch.title !== undefined) {
+    const title = patch.title.trim();
+    if (!title) return { error: "The title can't be blank." };
+    update.title = title;
+  }
+  if (patch.ownerId !== undefined) update.owner_id = patch.ownerId || null;
+  if (patch.leadId !== undefined) update.lead_id = patch.leadId || null;
+  if (patch.content !== undefined) update.content = patch.content;
+
+  const { error } = await supabase.from("proposals").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/proposals");
+  revalidatePath(`/proposals/${id}`);
+  return {};
+}
+
+/**
+ * Move a proposal along. Marking it Sent records who and when — that is the
+ * answer to Connor's "so we can see when a proposal has been sent", and it
+ * also writes the organisation's timeline so the proposal shows up beside
+ * the calls and emails rather than only on its own page.
+ */
+export async function setProposalStatus(id: string, status: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { PROPOSAL_STATUSES } = await import("@/lib/proposals");
+  if (!(PROPOSAL_STATUSES as readonly string[]).includes(status)) {
+    return { error: "That isn't a proposal status." };
+  }
+
+  const { data: before } = await supabase
+    .from("proposals")
+    .select("organisation_id, lead_id, title, version, sent_at")
+    .eq("id", id)
+    .maybeSingle();
+
+  const update: Record<string, unknown> = { status };
+  if (status === "Sent" && !before?.sent_at) {
+    update.sent_at = new Date().toISOString();
+    update.sent_by = user?.id ?? null;
+    update.sent_detected_from = "marked by hand";
+  }
+
+  const { error } = await supabase.from("proposals").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  if (before?.organisation_id) {
+    await supabase.from("activities").insert({
+      organisation_id: before.organisation_id,
+      lead_id: before.lead_id,
+      kind: "Note",
+      summary: `Proposal ${status.toLowerCase()}: ${before.title} v${before.version}`,
+      happened_at: new Date().toISOString(),
+      created_by: user?.id ?? null,
+    });
+  }
+
+  revalidatePath("/proposals");
+  revalidatePath(`/proposals/${id}`);
+  if (before?.organisation_id) revalidatePath(`/organisations/${before.organisation_id}`);
+  return {};
+}
+
+/**
+ * Version 2 (and 7). The new one is a copy at the next number; the old one
+ * becomes Superseded, so the history reads as a sequence and only one version
+ * is ever the live offer.
+ */
+export async function newProposalVersion(id: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: source, error: readError } = await supabase
+    .from("proposals")
+    .select("title, organisation_id, lead_id, kind, content, owner_id, version")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!source) return { error: "That proposal no longer exists." };
+
+  // The next number across the whole family, not just this row — two people
+  // branching from v3 should not both land on v4.
+  let next = Number(source.version) + 1;
+  if (source.lead_id) {
+    const { data: family } = await supabase
+      .from("proposals")
+      .select("version")
+      .eq("lead_id", source.lead_id)
+      .order("version", { ascending: false })
+      .limit(1);
+    if (family?.length) next = Number(family[0].version) + 1;
+  }
+
+  const { data, error } = await supabase
+    .from("proposals")
+    .insert({
+      title: source.title,
+      organisation_id: source.organisation_id,
+      lead_id: source.lead_id,
+      kind: source.kind,
+      content: source.content,
+      owner_id: source.owner_id,
+      created_by: user?.id ?? null,
+      version: next,
+      status: "Draft",
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  await supabase.from("proposals").update({ status: "Superseded" }).eq("id", id);
+
+  revalidatePath("/proposals");
+  return { id: data.id as string };
+}
+
+export async function deleteProposal(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("proposals").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/proposals");
+  return {};
+}

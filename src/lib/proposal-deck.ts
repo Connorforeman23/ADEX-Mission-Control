@@ -39,6 +39,41 @@ function asset(file: string) {
   }
 }
 
+/**
+ * The pixel size of a PNG data URI, read straight out of the IHDR chunk.
+ *
+ * Needed because pptxgenjs cannot measure a pre-encoded image: given a box
+ * it stretches the picture to fill it, which turns a square logo into a
+ * smear. Every logo the CRM stores is a PNG, so the width and height are the
+ * eight bytes at offset 16. Anything else returns null and the caller falls
+ * back to the box.
+ */
+function pngSize(dataUri: string): { w: number; h: number } | null {
+  try {
+    const base64 = dataUri.slice(dataUri.indexOf("base64,") + 7);
+    const head = Buffer.from(base64.slice(0, 64), "base64");
+    if (head.length < 24 || head.toString("ascii", 12, 16) !== "IHDR") return null;
+    const w = head.readUInt32BE(16);
+    const h = head.readUInt32BE(20);
+    return w > 0 && h > 0 ? { w, h } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Letterbox an image inside a box: the same proportions it came with,
+ * centred, never larger than the space allowed.
+ */
+function fitted(dataUri: string, x: number, y: number, w: number, h: number) {
+  const size = pngSize(dataUri);
+  if (!size) return { data: dataUri, x, y, w, h };
+  const scale = Math.min(w / size.w, h / size.h);
+  const fw = size.w * scale;
+  const fh = size.h * scale;
+  return { data: dataUri, x: x + (w - fw) / 2, y: y + (h - fh) / 2, w: fw, h: fh };
+}
+
 // --- the pieces ----------------------------------------------------------
 
 /** Eyebrow in pink caps, headline in bold navy, optional standfirst. */
@@ -305,16 +340,10 @@ function logoRow(
     const x = M + i * w;
     if (art) {
       // Boxed into a consistent height so a tall logo cannot tower over a wide
-      // one — the row has to read as a row.
+      // one — the row has to read as a row — and fitted rather than stretched,
+      // so a square logo stays square.
       const boxW = w * 0.72;
-      slide.addImage({
-        data: art,
-        x: x + (w - boxW) / 2,
-        y: y - 0.08,
-        w: boxW,
-        h: 0.5,
-        sizing: { type: "contain", w: boxW, h: 0.5 },
-      });
+      slide.addImage(fitted(art, x + (w - boxW) / 2, y - 0.08, boxW, 0.5));
       return;
     }
     slide.addText(name.toUpperCase(), {
@@ -536,7 +565,7 @@ export async function buildProposalDeck(deck: DeckSpec): Promise<Buffer> {
 
       if (brandMark) slide.addImage({ data: brandMark, x: M, y: 0.72, w: 1.32, h: 0.9 });
       if (deck.clientLogo) {
-        slide.addImage({ data: deck.clientLogo, x: M + 1.62, y: 0.78, w: 1.7, h: 0.78 });
+        slide.addImage(fitted(deck.clientLogo, M + 1.62, 0.72, 1.9, 0.9));
       }
 
       if (s.eyebrow) {
