@@ -3,19 +3,18 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildProposalFromBrief, readBriefDocument, saveClientBrief } from "@/lib/actions";
-import { PROPOSAL_PROMPT } from "@/lib/proposal-brief";
 
 /**
- * Write the brief, paste it, get the deck.
+ * The client's brief goes in. The deck comes out. One button.
  *
- * This is the way in. The slide-by-slide editor below is for tweaking what
- * comes out, not for building from nothing.
+ * Connor, on the version this replaced: "i normally then just put that
+ * document into Claude and ask it to build a proposal in house style... I
+ * just want this to be like that in the system instead, there is too many
+ * steps in this". He was right — copying a prompt out to another tab and
+ * pasting an answer back is not a feature, it is a missing one.
  *
- * Two boxes, numbered, because they do opposite jobs and an unlabelled pair
- * is genuinely confusing: the first holds what the CLIENT sent us, the second
- * holds what came BACK from the assistant. The prompt appears in one place
- * only — the button carries it, with the brief already attached, so there is
- * one thing on the clipboard and one paste at the other end.
+ * Writing an outline by hand still works, but it lives behind a disclosure
+ * now: it is the fallback, not the way in.
  */
 export default function BuildFromBrief({
   id,
@@ -28,31 +27,18 @@ export default function BuildFromBrief({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(!hasSlides);
-  const [clientBrief, setClientBrief] = useState(savedBrief);
+  const [brief, setBrief] = useState(savedBrief);
   const [outline, setOutline] = useState("");
   const [mode, setMode] = useState<"replace" | "append">("replace");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-  /** Shown only when the clipboard is refused, so the text can be selected. */
-  const [fallback, setFallback] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
 
-  /** The prompt and the client's brief, as one thing to paste. */
-  const composed = () =>
-    PROPOSAL_PROMPT + (clientBrief.trim() || "(paste the client's brief here)");
-
-  async function copyPrompt() {
-    setError(null);
-    setFallback(null);
-    try {
-      await navigator.clipboard.writeText(composed());
-      setNote("Copied. Paste it into ChatGPT or Claude, then bring the answer back to box 2.");
-      setTimeout(() => setNote(null), 6000);
-    } catch {
-      setFallback(composed());
-    }
+  function flash(message: string) {
+    setNote(message);
+    setTimeout(() => setNote(null), 8000);
   }
 
   async function attach(f: File) {
@@ -71,30 +57,61 @@ export default function BuildFromBrief({
     const res = await readBriefDocument(dataUri, f.name);
     setBusy(null);
     if ("error" in res) return setError(res.error);
-    // Added to whatever is already there — briefs arrive in more than one
-    // email as often as not.
-    setClientBrief((prev) => (prev.trim() ? `${prev.trim()}\n\n${res.text}` : res.text));
-    setNote(`Read ${f.name}.`);
-    setTimeout(() => setNote(null), 6000);
+    // Added to what is already there — briefs arrive in more than one email
+    // as often as not.
+    setBrief((prev) => (prev.trim() ? `${prev.trim()}\n\n${res.text}` : res.text));
+    flash(`Read ${f.name}.`);
+  }
+
+  /** The one that matters: brief in, slides out. */
+  async function write() {
+    setBusy("write");
+    setError(null);
+    setWarnings([]);
+    try {
+      const res = await fetch(`/api/proposals/${id}/draft`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ clientBrief: brief, mode }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        built?: number;
+        warnings?: string[];
+        pence?: number;
+      };
+      if (!res.ok || data.error) {
+        setBusy(null);
+        return setError(data.error ?? "The deck could not be written.");
+      }
+      setWarnings(data.warnings ?? []);
+      setBusy(null);
+      setOpen(false);
+      flash(
+        `Wrote ${data.built} slides${data.pence ? ` — about ${data.pence}p` : ""}. Read them through before it goes anywhere.`
+      );
+      router.refresh();
+    } catch {
+      setBusy(null);
+      setError("The request failed before it finished. Try again.");
+    }
   }
 
   async function keepBrief() {
     setBusy("brief");
     setError(null);
-    const res = await saveClientBrief(id, clientBrief);
+    const res = await saveClientBrief(id, brief);
     setBusy(null);
     if (res.error) return setError(res.error);
-    setNote("The client's brief is saved against this proposal.");
-    setTimeout(() => setNote(null), 6000);
+    flash("Saved.");
     router.refresh();
   }
 
-  async function build() {
-    setBusy("build");
+  /** The fallback, for an outline written or pasted by hand. */
+  async function buildFromOutline() {
+    setBusy("outline");
     setError(null);
     setWarnings([]);
-    // Keep the client's brief too, so it is not lost when the panel closes.
-    if (clientBrief.trim() !== savedBrief.trim()) await saveClientBrief(id, clientBrief);
     const res = await buildProposalFromBrief(id, outline, mode);
     setBusy(null);
     if ("error" in res && res.error) return setError(res.error);
@@ -115,41 +132,44 @@ export default function BuildFromBrief({
             Build from a brief
           </button>
           <small className="sub-line">
-            {savedBrief
-              ? "The client's brief is saved here. Open this to rebuild the slides from it."
-              : "Drop in the client's brief and build the slides from it."}
+            {note ?? "Drop in the client's brief and the deck writes itself."}
           </small>
         </div>
       </section>
     );
   }
 
-  const mono = {
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-    fontSize: 12.5,
-  } as const;
-
   return (
     <section className="card" style={{ marginBottom: 14 }}>
       <div className="card-body">
-        <div className="eyebrow" style={{ marginBottom: 10 }}>
+        <div className="eyebrow" style={{ marginBottom: 8 }}>
           Build from a brief
         </div>
-
-        {/* --- 1 ------------------------------------------------------- */}
-        <h3 style={{ margin: "0 0 4px", fontSize: 14 }}>1. The client&rsquo;s brief</h3>
-        <p className="sub-line" style={{ margin: "0 0 8px" }}>
-          Attach what they sent, or paste it in. It stays on the proposal, so you can re-read what
-          was actually asked for.
+        <p className="sub-line" style={{ margin: "0 0 10px" }}>
+          Attach the client&rsquo;s document or paste it in, then press Write the deck. It comes
+          out in ADEX house style, and nothing is invented &mdash; a figure the brief does not give
+          is left blank rather than guessed.
         </p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
           <button className="btn" onClick={() => file.current?.click()} disabled={!!busy}>
             {busy === "file" ? "Reading…" : "Attach a document"}
           </button>
-          <button className="btn" onClick={keepBrief} disabled={!!busy || !clientBrief.trim()}>
+          <button className="btn" onClick={keepBrief} disabled={!!busy || !brief.trim()}>
             {busy === "brief" ? "Saving…" : "Save the brief"}
           </button>
+          {hasSlides && (
+            <select
+              className="input"
+              style={{ maxWidth: 210 }}
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "replace" | "append")}
+              disabled={!!busy}
+            >
+              <option value="replace">Replace the slides</option>
+              <option value="append">Add to the end</option>
+            </select>
+          )}
           <small className="sub-line" style={{ alignSelf: "center" }}>
             Word (.docx) or plain text. For a PDF, open it and paste the text.
           </small>
@@ -157,62 +177,30 @@ export default function BuildFromBrief({
 
         <textarea
           className="input"
-          rows={8}
-          value={clientBrief}
-          onChange={(e) => setClientBrief(e.target.value)}
-          placeholder="Paste the client's brief — the email, the document, whatever they sent."
+          rows={14}
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+          placeholder="Paste the client's brief — the email, the report, whatever they sent."
+          disabled={busy === "write"}
         />
 
-        {/* --- 2 ------------------------------------------------------- */}
-        <h3 style={{ margin: "18px 0 4px", fontSize: 14 }}>2. Turn it into slides</h3>
-        <p className="sub-line" style={{ margin: "0 0 8px" }}>
-          The button puts our house-style instructions and the brief above on your clipboard as one
-          piece. Paste that into ChatGPT or Claude, then paste its answer into the box below.
-        </p>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-          <button className="btn" onClick={copyPrompt} disabled={!!busy}>
-            Copy the house style + this brief
+        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            className="btn btn-primary"
+            onClick={write}
+            disabled={!!busy || !brief.trim()}
+          >
+            {busy === "write" ? "Writing the deck…" : "Write the deck"}
           </button>
-          {hasSlides && (
-            <select
-              className="input"
-              style={{ maxWidth: 220 }}
-              value={mode}
-              onChange={(e) => setMode(e.target.value as "replace" | "append")}
-            >
-              <option value="replace">Replace the slides</option>
-              <option value="append">Add to the end</option>
-            </select>
+          <button className="btn" onClick={() => setOpen(false)} disabled={!!busy}>
+            Close
+          </button>
+          {busy === "write" && (
+            <small className="sub-line">
+              A long brief takes a minute or two. Leave this page open.
+            </small>
           )}
         </div>
-
-        {fallback && (
-          <textarea
-            className="input"
-            rows={8}
-            readOnly
-            value={fallback}
-            style={{ ...mono, marginBottom: 8 }}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-        )}
-
-        <textarea
-          className="input"
-          rows={12}
-          value={outline}
-          onChange={(e) => setOutline(e.target.value)}
-          placeholder={
-            "Paste the answer here.\n\n# 2027 Growth Planning\nPrepared for Randox Health\n\n## The audience | Who we need to reach\n\nfigures:\n1.4m = Adults reached\n\nstrip: Two thirds of the audience, four times over."
-          }
-          style={mono}
-        />
-        <small className="sub-line">
-          You can also write this yourself — a slide starts with <code>##</code>, then{" "}
-          <code>figures:</code>, <code>bullets:</code>, <code>steps:</code>, <code>table:</code>,{" "}
-          <code>logos:</code>, <code>strip:</code> or <code>note:</code>.
-        </small>
 
         {error && <p style={{ color: "var(--crit)", marginBottom: 0 }}>{error}</p>}
         {note && !error && (
@@ -230,14 +218,34 @@ export default function BuildFromBrief({
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-          <button className="btn btn-primary" onClick={build} disabled={!!busy || !outline.trim()}>
-            {busy === "build" ? "Building…" : "Build the slides"}
+        <details style={{ marginTop: 16 }}>
+          <summary className="sub-line" style={{ cursor: "pointer" }}>
+            Write the slides yourself instead
+          </summary>
+          <p className="sub-line" style={{ margin: "8px 0" }}>
+            A slide starts with <code>##</code>, then <code>figures:</code>, <code>bullets:</code>,{" "}
+            <code>steps:</code>, <code>table:</code>, <code>logos:</code>, <code>strip:</code> or{" "}
+            <code>note:</code>.
+          </p>
+          <textarea
+            className="input"
+            rows={10}
+            value={outline}
+            onChange={(e) => setOutline(e.target.value)}
+            placeholder={
+              "## The audience | Who we need to reach\n\nfigures:\n1.4m = Adults reached\n\nstrip: Two thirds of the audience, four times over."
+            }
+            style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5 }}
+          />
+          <button
+            className="btn"
+            style={{ marginTop: 8 }}
+            onClick={buildFromOutline}
+            disabled={!!busy || !outline.trim()}
+          >
+            {busy === "outline" ? "Building…" : "Build from this outline"}
           </button>
-          <button className="btn" onClick={() => setOpen(false)} disabled={!!busy}>
-            Close
-          </button>
-        </div>
+        </details>
 
         <input
           ref={file}
