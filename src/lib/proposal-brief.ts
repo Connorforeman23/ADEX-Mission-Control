@@ -420,12 +420,21 @@ note: Rates requested
 Rules that matter:
 
 1. The HEADLINE is a claim, not a label. "Pay only to reach people on your own patch", never "Audience". A reader who reads only the headlines must still follow the argument.
-2. Use only the blocks a slide needs. Most slides need one or two. Never put every block on one slide.
-3. NEVER invent a number, a rate, an audience figure or a media owner. If a figure is needed and the brief does not give it, leave the value blank and add "note: Figures to be confirmed". Made-up numbers go to real clients and that is unacceptable.
+2. NEVER invent a number, a rate, an audience figure, a source or a media owner. If a figure is needed and the source material does not give it, leave the value blank and add "note: Figures to be confirmed". Made-up numbers go to real clients and that is unacceptable.
+3. Use only the blocks a slide needs. Most slides need one or two. Never put every block on one slide.
 4. "logos:" takes media owner names only — the CRM supplies the images.
-5. "strip:" is the one sentence that matters on that slide. Use it sparingly.
-6. Aim for 6 to 10 slides: cover, the brief, the audience, the idea, the plan, the media and money, next steps.
+5. Aim for 6 to 12 slides. One slide per section of the source material, plus a cover.
 
-The brief:
+How ADEX documents map onto these blocks — follow this, it is our house style:
+
+- A numbered section heading ("01 Executive recommendation") becomes the "## Executive recommendation | <the claim it makes>".
+- The sentence under a section heading that summarises it becomes the paragraph of argument.
+- A figure strip — a row of labels in capitals with values underneath, like "LAUNCH MARKET / ILLUSTRATIVE ENVELOPE" — becomes "figures:", written as "€116,700 = Illustrative envelope".
+- A callout in capitals ("SCENARIO ASSUMPTION ...", "TARGETING IMPLICATION ...", "PORTFOLIO CAVEAT ...") becomes "strip:" — it is the one point that slide exists to make. One per slide at most.
+- Any table becomes "table:", first row the headings, columns separated by |. Keep it to four columns and six rows; cut the least useful column rather than squeezing.
+- A "Source: ..." line becomes "note:". Carry the source through — never drop an attribution, and never attach one to a figure it did not come from.
+- Where the material says what the client must decide or do next, that is the closing slide: "layout: closing" with bullets.
+
+The source material:
 
 `;

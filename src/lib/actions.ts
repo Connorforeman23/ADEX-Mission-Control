@@ -1963,3 +1963,43 @@ export async function buildProposalFromBrief(
   revalidatePath(`/proposals/${id}`);
   return { built: slides.length, warnings };
 }
+
+/**
+ * Read a document the user dropped in, and hand back its words.
+ *
+ * Nothing is saved here — the text goes into the box so it can be read and
+ * trimmed before it becomes part of the proposal. A client's brief usually
+ * has a signature block and a disclaimer on the end that nobody wants in it.
+ */
+export async function readBriefDocument(dataUri: string, filename: string) {
+  const { extractDocumentText } = await import("@/lib/document-text");
+  return extractDocumentText(dataUri, filename);
+}
+
+/**
+ * Keep the client's brief on the proposal.
+ *
+ * Worth storing in its own right, separate from the slides: it is the record
+ * of what was actually asked for, and the thing to re-read when the client
+ * says the proposal missed the point.
+ */
+export async function saveClientBrief(id: string, clientBrief: string) {
+  const supabase = await createClient();
+  const { data: current, error: readError } = await supabase
+    .from("proposals")
+    .select("content")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!current) return { error: "That proposal no longer exists." };
+
+  const content = (current.content ?? {}) as Record<string, unknown>;
+  const { error } = await supabase
+    .from("proposals")
+    .update({ content: { ...content, clientBrief: clientBrief.trim() || undefined } })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/proposals/${id}`);
+  return {};
+}

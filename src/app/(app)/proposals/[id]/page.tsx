@@ -78,7 +78,11 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
       )}
 
       {proposal.kind === "deck" && (
-        <BuildFromBrief id={proposal.id} hasSlides={proposal.slideCount > 0} />
+        <BuildFromBrief
+          id={proposal.id}
+          hasSlides={proposal.slideCount > 0}
+          clientBrief={typeof proposal.content.clientBrief === "string" ? proposal.content.clientBrief : ""}
+        />
       )}
 
       <ProposalEditor

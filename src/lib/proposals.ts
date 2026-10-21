@@ -36,8 +36,13 @@ export const STATUS_CLASS: Record<string, string> = {
 /** What the email kind stores in `content` instead of a deck. */
 export type EmailOffer = { subject: string; body: string };
 
-/** The `content` column: a deck specification, or an email offer. */
-export type ProposalContent = Partial<DeckSpec> & Partial<EmailOffer>;
+/**
+ * The `content` column: a deck specification, or an email offer, plus the
+ * client's own brief — kept because it is the record of what was actually
+ * asked for, and the thing to re-read when a client says we missed the point.
+ */
+export type ProposalContent = Partial<DeckSpec> &
+  Partial<EmailOffer> & { clientBrief?: string };
 
 export type ProposalRow = {
   id: string;
