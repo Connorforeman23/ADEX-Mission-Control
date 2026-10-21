@@ -16,7 +16,7 @@ export default async function ProposalsPage({
   searchParams: Promise<{ status?: string; owner?: string; new?: string; lead?: string }>;
 }) {
   const supabase = await createClient();
-  const [rows, profile, { data: orgs }, { data: leads }, { data: staff }, params] =
+  const [{ rows, error }, profile, { data: orgs }, { data: leads }, { data: staff }, params] =
     await Promise.all([
       getProposals(),
       getMyProfile(),
@@ -122,13 +122,27 @@ export default async function ProposalsPage({
         </Link>
       </div>
 
+      {error && (
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-body">
+            <p style={{ margin: 0, color: "var(--crit)" }}>
+              The proposals could not be read, so this page is showing nothing rather than
+              nothing being there.
+            </p>
+            <small className="sub-line">{error}</small>
+          </div>
+        </section>
+      )}
+
       <section className="card">
         <div className="card-body" style={{ padding: filtered.length ? 0 : undefined }}>
           {filtered.length === 0 ? (
             <p className="empty-note">
-              {rows.length === 0
-                ? "No proposals recorded yet. Start one above and it will show here from draft through to won or lost."
-                : "Nothing matches that filter."}
+              {error
+                ? "Nothing to show while the proposals cannot be read."
+                : rows.length === 0
+                  ? "No proposals recorded yet. Start one above and it will show here from draft through to won or lost."
+                  : "Nothing matches that filter."}
             </p>
           ) : (
             <div className="table-wrap">

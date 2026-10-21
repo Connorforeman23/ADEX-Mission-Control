@@ -1254,13 +1254,24 @@ function proposalRow(r: ProposalRecord): ProposalRow {
   };
 }
 
-export async function getProposals(): Promise<ProposalRow[]> {
+/**
+ * The proposal list, and whether reading it worked.
+ *
+ * The error is returned rather than swallowed: an empty list and a failed
+ * read look identical to a reader, and telling someone there are no
+ * proposals when in truth we could not look is worse than saying nothing.
+ * It caught a missing migration the first time the page was opened.
+ */
+export async function getProposals(): Promise<{ rows: ProposalRow[]; error: string | null }> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("proposals")
     .select(PROPOSAL_SELECT)
     .order("updated_at", { ascending: false });
-  return ((data ?? []) as unknown as ProposalRecord[]).map(proposalRow);
+  return {
+    rows: ((data ?? []) as unknown as ProposalRecord[]).map(proposalRow),
+    error: error?.message ?? null,
+  };
 }
 
 export async function getProposal(id: string): Promise<ProposalDetail | null> {
