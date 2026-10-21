@@ -1655,3 +1655,66 @@ export async function setTaskStatus(id: string, status: "Open" | "Done" | "Parke
   revalidatePath("/");
   return {};
 }
+
+// --- organisation logos --------------------------------------------------
+
+/** What an upload is allowed to be, before it is normalised. */
+const MAX_LOGO_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Save a company's logo, for use on proposal decks.
+ *
+ * The file is normalised here rather than trusted: resized to 400px wide,
+ * converted to PNG, and transparency kept so it sits on a dark slide as
+ * happily as a light one. That is what stops a 4MB camera JPEG becoming a row
+ * in the database, and what makes every logo on a slide the same height.
+ */
+export async function saveOrganisationLogo(organisationId: string, dataUri: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in." };
+
+  const match = /^data:(image\/(png|jpeg|jpg|webp|gif|svg\+xml));base64,(.+)$/i.exec(dataUri.trim());
+  if (!match) return { error: "That doesn't look like an image. PNG, JPG, WEBP or SVG please." };
+
+  const raw = Buffer.from(match[3], "base64");
+  if (raw.length > MAX_LOGO_BYTES) {
+    return { error: "That image is over 4MB. Please use a smaller one." };
+  }
+
+  let normalised: string;
+  try {
+    const sharp = (await import("sharp")).default;
+    const png = await sharp(raw)
+      .resize({ width: 400, withoutEnlargement: true, fit: "inside" })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    normalised = `data:image/png;base64,${png.toString("base64")}`;
+  } catch {
+    return { error: "That image couldn't be read. Try a PNG or JPG." };
+  }
+
+  const { error } = await supabase
+    .from("organisations")
+    .update({ logo: normalised })
+    .eq("id", organisationId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/organisations/${organisationId}`);
+  revalidatePath("/organisations");
+  return {};
+}
+
+export async function removeOrganisationLogo(organisationId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("organisations")
+    .update({ logo: null })
+    .eq("id", organisationId);
+  if (error) return { error: error.message };
+  revalidatePath(`/organisations/${organisationId}`);
+  revalidatePath("/organisations");
+  return {};
+}

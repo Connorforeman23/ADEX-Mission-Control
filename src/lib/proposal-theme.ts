@@ -86,7 +86,8 @@ export type SlideSpec = {
   steps?: { label: string; title: string; detail?: string }[];
   /** Three columns of bullets, for stop / continue / start. */
   lists?: { title: string; items: string[] }[];
-  /** Supplier names whose logos should run along the foot of the slide. */
+  /** Supplier names whose logos run along the foot — the CRM supplies the
+   *  images, so nobody sources them by hand. */
   logos?: string[];
   /** The navy strip: the one point the slide exists to make. */
   strip?: string;
@@ -99,6 +100,8 @@ export type SlideSpec = {
 
 export type DeckSpec = {
   client: string;
+  /** Supplier name (lower case) → data URI, taken from the organisations. */
+  supplierLogos?: Record<string, string>;
   title: string;
   subtitle?: string;
   clientDomain?: string;

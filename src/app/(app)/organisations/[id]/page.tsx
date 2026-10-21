@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrganisation, getOrganisationTimeline, getSalesTeam } from "@/lib/queries";
 import OrgTimeline from "@/components/OrgTimeline";
+import LogoUpload from "@/components/LogoUpload";
 import { CUSTOMER_STATUS_LABEL } from "@/lib/organisations";
 import { dateGB, gbp, rangeGB, STATUS_LABEL } from "@/lib/money";
 import OrganisationActions from "@/components/OrganisationActions";
@@ -63,6 +64,12 @@ export default async function OrganisationPage({
         </div>
         <OrganisationActions org={org} staff={staff} />
       </div>
+
+      <section className="card" style={{ marginBottom: 14 }}>
+        <div className="card-body">
+          <LogoUpload organisationId={org.id} name={org.name} logo={org.logo} />
+        </div>
+      </section>
 
       <div className="kpis">
         <div className="card kpi">

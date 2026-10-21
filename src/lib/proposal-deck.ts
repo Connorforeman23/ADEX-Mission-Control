@@ -286,13 +286,39 @@ function strip(slide: PptxGenJS.Slide, text: string, x: number, y: number, w: nu
   });
 }
 
-/** Media owner names along the foot, as Benson Goldstein does under the TV slide. */
-function logoRow(slide: PptxGenJS.Slide, names: string[], y: number) {
+/**
+  * Media owner logos along the foot, as Benson Goldstein does under the TV
+  * slide. The CRM holds a logo against each supplier, so these arrive without
+  * anyone sourcing them; a supplier with no logo yet falls back to its name
+  * set in grey, which still reads deliberately.
+  */
+function logoRow(
+  slide: PptxGenJS.Slide,
+  names: string[],
+  y: number,
+  logos: Record<string, string> = {}
+) {
   const n = Math.min(names.length, 6);
   const w = (W - M * 2) / n;
   names.slice(0, n).forEach((name, i) => {
+    const art = logos[name.trim().toLowerCase()];
+    const x = M + i * w;
+    if (art) {
+      // Boxed into a consistent height so a tall logo cannot tower over a wide
+      // one — the row has to read as a row.
+      const boxW = w * 0.72;
+      slide.addImage({
+        data: art,
+        x: x + (w - boxW) / 2,
+        y: y - 0.08,
+        w: boxW,
+        h: 0.5,
+        sizing: { type: "contain", w: boxW, h: 0.5 },
+      });
+      return;
+    }
     slide.addText(name.toUpperCase(), {
-      x: M + i * w,
+      x,
       y,
       w,
       h: 0.34,
@@ -728,7 +754,7 @@ export async function buildProposalDeck(deck: DeckSpec): Promise<Buffer> {
       y += 3.3;
     }
 
-    if (s.logos?.length) logoRow(slide, s.logos, H - 1.34);
+    if (s.logos?.length) logoRow(slide, s.logos, H - 1.34, deck.supplierLogos ?? {});
     if (s.footnote) {
       slide.addText(s.footnote, {
         x: M,
