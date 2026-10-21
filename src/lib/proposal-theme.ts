@@ -1,42 +1,40 @@
-// The ADEX proposal look, taken from four real decks rather than invented:
-// Faster Property Solutions, Affinity Water C-04487, Vintage 2027 Growth
-// Planning and Benson Goldstein.
+// The ADEX proposal look, taken from the real decks rather than invented:
+// Affinity Water C-04487, Benson Goldstein v7, Faster Property Solutions and
+// Vintage 2027 Growth Planning.
 //
 // Every colour below is one the decks actually use, by frequency. The pink and
 // the blue are the brand; the navy is what the decks put behind white text;
 // the slate and the washes are the supporting greys.
 
 export const BRAND = {
-  /** The ADEX pink — accent1 across the decks, and the dominant accent. */
+  /** The ADEX pink — the dominant accent, used for eyebrows and figures. */
   pink: "D93B6E",
   /** The ADEX blue — the same blue as the dots in the logo. */
   blue: "29ABE2",
-  /** Deep navy: dark slide backgrounds, headings on light slides. */
+  /** Deep navy: dark slides, headlines, emphasis strips. */
   ink: "0D1B2A",
   /** A lighter navy, for panels on a dark slide. */
   inkSoft: "1B2E44",
-  /** Secondary text, labels, footers. */
+  /** Body copy on a light slide, and secondary text. */
   slate: "5A6B7B",
-  /** The light page wash. */
-  wash: "F2F4F7",
-  /** A slightly deeper wash, for cards on a light slide. */
+  /** Small-caps labels under figures. */
+  label: "5B6B7F",
+  /** The light page wash, used for table stripes and image grounds. */
+  wash: "F1F4F8",
   washDeep: "E3E8EE",
-  /** Hairlines and card borders. */
-  line: "C4D2DE",
+  line: "C9D3DE",
   white: "FFFFFF",
-  /** Tints of the brand pink, used behind figures. */
   pinkSoft: "E77FA2",
   pinkWash: "F4C6D5",
 } as const;
 
 /**
- * Calibri throughout, Calibri Light for headings — what the decks use.
- *
- * Both ship with Office and render at true width when the deck is checked,
- * so what we see when proofing is what the client will see.
+ * Calibri throughout — what every deck uses. Headlines are Calibri BOLD, not
+ * Light: the real decks lead with weight, and that is most of why they look
+ * confident.
  */
 export const FONTS = {
-  heading: "Calibri Light",
+  heading: "Calibri",
   body: "Calibri",
 } as const;
 
@@ -44,42 +42,54 @@ export const FONTS = {
 export const SLIDE = { w: 13.333, h: 7.5 } as const;
 
 /**
- * The grammar every ADEX content slide follows. Named here because it is the
- * thing that makes the decks good, and the thing the generator must not drift
- * from:
+ * The grammar every ADEX content slide follows:
  *
- *   eyebrow     the section, in caps        "TARGETED DIGITAL"
- *   headline    a CLAIM, never a label      "Around 80% of investment is in linear TV"
- *   standfirst  one line of context         "Media investment by channel, Jan–Oct 2026"
- *   body        the substance
- *   takeaway    what it means               "Reach is high; repeated exposure explains the index"
+ *   eyebrow     the section, in pink caps   "IDEA 01 · ZERO-WASTE GEOGRAPHY"
+ *   headline    a CLAIM, never a label      "Pay only to reach people on Affinity's network"
+ *   then one or two blocks of substance, and where it earns its place,
+ *   a navy strip carrying the single point the slide exists to make.
  *
  * A reader who reads only the headlines should still follow the argument.
  */
+
+/** A big figure: the number, and a small-caps label beneath it. */
+export type Figure = { value: string; label: string; note?: string };
+
+/** A numbered row: navy disc, bold label, grey detail — the Affinity pattern. */
+export type IconRow = { label: string; detail: string };
+
+/** One side of a two-column slide. */
+export type Column =
+  | { kind: "prose"; heading?: string; text: string }
+  | { kind: "iconRows"; heading?: string; rows: IconRow[] }
+  | { kind: "figures"; figures: Figure[] }
+  | { kind: "table"; rows: string[][] }
+  | { kind: "bullets"; heading?: string; items: string[] }
+  /** A picture the author drops in: a photo, a chart, a schematic. */
+  | { kind: "image"; dataUri?: string; caption?: string };
+
 export type SlideSpec = {
   layout:
     | "cover"
-    | "routes" // the menu of options, as on Faster Property slide 1
-    | "route" // one costed route with its metrics
-    | "metrics" // a figure-led slide
-    | "table"
-    | "process" // numbered steps with arrows
+    | "split" // two columns — the workhorse: image or figures left, argument right
+    | "full" // one column across the slide
+    | "steps" // numbered process
     | "stopContinueStart"
     | "closing";
   eyebrow?: string;
   headline: string;
   standfirst?: string;
-  /** Big figures: value, label, and an optional note under it. */
-  figures?: { value: string; label: string; note?: string }[];
-  /** Points — a heading and a line, as the decks use for "WHY IT'S INTERESTING". */
-  points?: { title: string; detail: string }[];
-  /** Rows for a table layout. First row is the header. */
-  rows?: string[][];
-  /** Numbered steps for a process layout. */
+  /** Left and right for "split"; the first is used for "full". */
+  columns?: Column[];
+  /** Figures that run across the slide under the headline. */
+  figures?: Figure[];
   steps?: { label: string; title: string; detail?: string }[];
-  /** Three columns, for the stop / continue / start slide. */
-  columns?: { title: string; items: string[] }[];
-  takeaway?: string;
+  /** Three columns of bullets, for stop / continue / start. */
+  lists?: { title: string; items: string[] }[];
+  /** Supplier names whose logos should run along the foot of the slide. */
+  logos?: string[];
+  /** The navy strip: the one point the slide exists to make. */
+  strip?: string;
   /**
    * Anything not yet confirmed. The real decks say "Rate requested" and
    * "Detail to follow" rather than inventing a number, and so must we.
@@ -88,13 +98,11 @@ export type SlideSpec = {
 };
 
 export type DeckSpec = {
-  /** "Faster Property Solutions" */
   client: string;
-  /** "Media Opportunities" */
   title: string;
-  /** The line under the title on the cover. */
   subtitle?: string;
-  /** Printed in the footer beside the ADEX name. */
   clientDomain?: string;
+  /** The client's own logo for the cover, beside the ADEX mark. */
+  clientLogo?: string;
   slides: SlideSpec[];
 };
