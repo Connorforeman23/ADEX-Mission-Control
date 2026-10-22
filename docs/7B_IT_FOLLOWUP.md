@@ -54,8 +54,8 @@ client flows stays **No**.
 
 **3. Please confirm the permissions, and grant admin consent**
 
-**API permissions** → these six, all **Delegated**, Microsoft Graph. Please add
-any that are missing:
+**API permissions** → these seven, all **Delegated**, Microsoft Graph. Please
+add any that are missing:
 
 | Permission | What it is for |
 |---|---|
@@ -65,9 +65,39 @@ any that are missing:
 | `Calendars.Read` | Show a person's meetings in the CRM |
 | `Calendars.ReadWrite` | Put a task the person themselves timed into their own calendar |
 | `offline_access` | Stay connected without asking them to sign in daily |
+| `Files.ReadWrite.All` | File Space Orders into the client's folder on the shared drive, and read back the order numbers already there |
 
 Then **Grant admin consent for Advertising Excellence Ltd**, so staff aren't
 each blocked or prompted when they sign in.
+
+### About `Files.ReadWrite.All`
+
+This is the new one since my last request, and the name sounds broader than it
+is, so here is exactly what it does and does not mean.
+
+It is **delegated**, like everything else above. That means it reaches only the
+files the signed-in person can already open themselves. It gives the CRM no
+access of its own, nothing when nobody is signed in, and nothing a member of
+staff could not already reach through File Explorer.
+
+Two uses, both on our Space Orders folder:
+
+1. **Write.** When a Space Order is sent to a supplier, the CRM saves a copy to
+   that client's folder, so the paperwork is filed without anyone doing it by
+   hand. It only ever creates new files. It will never overwrite an existing
+   one — if a file of that name is already there, the CRM stops and asks,
+   because that means something is out of step.
+2. **Read.** Order numbers run in a sequence per client (ADE0001, ADE0002 and
+   so on), and a lot of that history predates the CRM. Reading the filenames
+   already in the folder lets it carry on from the right number instead of
+   starting again at 0001 and issuing a supplier a number we have already used.
+
+The narrower `Files.ReadWrite` would not do: it covers only a person's own
+OneDrive, not a shared SharePoint library, which is where the orders live.
+
+If your policy would rather this were scoped to one site or library instead of
+the tenant, say so and we will work to whatever you prefer — the CRM only ever
+touches the Space Orders folder.
 
 Please do **not** add any *Application* permissions. These are all delegated,
 which means the CRM can only ever act for a person who has signed in and linked
@@ -94,10 +124,16 @@ you delete afterwards, is fine.
 
 The Application (client) ID I already have.
 
-**Still outstanding from my original request:** is our shared drive on
-SharePoint / OneDrive, or a server in the office? We'd like Space Orders filed
-to the client's folder automatically when they're sent, which is straightforward
-if the drive is in 365 and not possible if it's on a server here.
+**One question I still need answered, and it decides whether point 3 above is
+worth granting at all:** is our shared drive on SharePoint / OneDrive, or a
+server in the office?
+
+If it is in 365, the filing described above works and `Files.ReadWrite.All`
+earns its place. If the drive is a server here, the CRM runs in the cloud and
+cannot reach it, so please leave that permission off and I will find another
+way. Either answer is useful — I just need to know which.
+
+If it is on SharePoint, the path to the Space Orders folder would help too.
 
 Thanks,
 Connor
