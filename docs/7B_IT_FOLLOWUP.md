@@ -1,70 +1,88 @@
-# Follow-up to IT — the app registration is in the wrong directory
+# Follow-up to IT — make the app registration multi-tenant
 
-*Follows the request in [7B_IT_REQUEST.md](7B_IT_REQUEST.md). Everything in
-that request still stands; only the directory it was created in is wrong.*
+*Follows the request in [7B_IT_REQUEST.md](7B_IT_REQUEST.md). The permissions,
+redirect URIs and secret from that request are all correct and unchanged. One
+setting needs to change, and one approval needs granting.*
+
+**Why multi-tenant rather than moving it:** Connor uses the CRM with mailboxes
+in both Clear Focus Management and Advertising Excellence. A single-tenant app
+can only ever serve one of them, so the app has to accept both directories.
+The original request asked for single tenant, which was wrong about this
+requirement — that part is on us, not IT.
 
 ---
 
-**Subject:** ADEX Mission Control — app registration is in the wrong tenant
+**Subject:** ADEX Mission Control — one setting change on the app registration
 
 Hi,
 
 Thanks for setting up the app registration for ADEX Mission Control. There's
-one thing that needs changing before the team can use it, and I don't think it
-will take long.
+one setting that needs changing before the team can use it. The permissions,
+redirect URIs and secret are all correct — please don't change those.
 
 **What's happening**
 
 When anyone with an `@advertisingexcellence.co.uk` account tries to connect
-their mailbox, Microsoft turns them away with this:
+their mailbox, Microsoft turns them away:
 
 > Selected user account does not exist in tenant 'Clear Focus Management' and
 > cannot access the application 'a806aba2-4c4c-4b4f-8fa5-dda727795533' in that
 > tenant. The account needs to be added as an external user in the tenant
 > first. Please use a different account.
 
-**What that means**
+**Why**
 
-The app registration was created in the **Clear Focus Management** directory,
-not the **Advertising Excellence** one. It was set up as single-tenant, which
-is correct — but that means it only accepts sign-ins from accounts in the same
-directory as the app. Our staff are all in the Advertising Excellence
-directory, so none of them can get in.
+The app lives in the Clear Focus Management directory and is registered as
+single-tenant, so it only accepts sign-ins from that directory. Our staff are
+in the Advertising Excellence directory.
 
-Easily done if you administer both companies — Entra puts you back in whichever
-directory you used last.
+I need it to work for both — I use the CRM with mailboxes in each. So rather
+than moving it, please make the app multi-tenant.
 
-**What we need**
+**Change 1 — on the existing registration (Clear Focus Management directory)**
 
-The same registration, in the **Advertising Excellence** directory. Everything
-else from the original request is unchanged:
+Entra admin centre → App registrations → `ADEX Mission Control`
+(`a806aba2-4c4c-4b4f-8fa5-dda727795533`) → **Authentication** → Supported
+account types:
 
-| Setting | Value |
+| From | To |
 |---|---|
-| Directory | **Advertising Excellence** — please check the directory switcher before creating it |
-| Name | `ADEX Mission Control` |
-| Supported account types | Accounts in this organizational directory only (single tenant) |
-| Redirect URI — platform | Web |
-| Redirect URI 1 | `https://adex-mission-control.vercel.app/api/microsoft/callback` |
-| Redirect URI 2 | `https://adex-mission-control-git-dev-adex3.vercel.app/api/microsoft/callback` |
+| Accounts in this organizational directory only | **Accounts in any organizational directory (Any Microsoft Entra ID tenant — Multitenant)** |
 
-Delegated Microsoft Graph permissions, as before — `User.Read`, `Mail.Read`,
-`Mail.Send`, `Calendars.Read`, `Calendars.ReadWrite`, `offline_access`. No
-Application permissions. Then **Grant admin consent for Advertising Excellence
-Ltd**.
+Save. Nothing else on that page changes — the redirect URIs stay as they are,
+implicit grant stays off, public client flows stay off.
 
-New client secret, description `Vercel`, expiry 24 months.
+Please choose the **Multitenant** option, not the one that also includes
+personal Microsoft accounts. This should be work and school accounts only.
 
-**Please send back, securely — not in plain email**
+**Change 2 — approve it in the Advertising Excellence directory**
 
-1. Application (client) ID
-2. Directory (tenant) ID — this is the one that was wrong, so worth
-   double-checking it is the Advertising Excellence directory
-3. Client secret value (shown once, on creation)
-4. The secret's expiry date
+A multi-tenant app still has to be approved by each organisation that uses it.
+Someone with Global Administrator or Privileged Role Administrator in the
+**Advertising Excellence** directory needs to open this link, sign in with
+their Advertising Excellence account, and approve:
 
-The old registration in Clear Focus Management can be deleted — nothing is
-using it.
+```
+https://login.microsoftonline.com/common/adminconsent?client_id=a806aba2-4c4c-4b4f-8fa5-dda727795533&redirect_uri=https://adex-mission-control.vercel.app/api/microsoft/callback
+```
+
+It will list the same delegated permissions as before — `User.Read`,
+`Mail.Read`, `Mail.Send`, `Calendars.Read`, `Calendars.ReadWrite`,
+`offline_access`. Approving shows a short "Consent granted" page; there's
+nothing to do after that, and no CRM account is needed to do it.
+
+To be clear about what this grants: these are **delegated** permissions only.
+The CRM can act only for a person who has signed in and linked their own
+mailbox, and only on that person's own mail and calendar. It cannot read
+anyone else's, and it cannot do anything when nobody is signed in.
+
+**Please confirm back**
+
+1. That the app is now multitenant
+2. That admin consent has been granted in the Advertising Excellence directory
+3. The **Directory (tenant) ID** for Advertising Excellence, for our records
+
+Nothing needs re-issuing — the client ID and secret stay the same.
 
 **Still outstanding from the original request:** is our shared drive on
 SharePoint / OneDrive, or a server in the office? We'd like Space Orders filed
@@ -76,19 +94,31 @@ Connor
 
 ---
 
-## What happens at our end once they reply
+## What happens at our end once they confirm
 
-1. In Vercel → Settings → Environment Variables, update all three for
+1. In Vercel → Settings → Environment Variables, change **one** variable for
    **Production and Preview**:
-   - `MS_CLIENT_ID` — the new Application (client) ID
-   - `MS_TENANT_ID` — the new Directory (tenant) ID
-   - `MS_CLIENT_SECRET` — the new secret value
-2. **Redeploy.** Vercel bakes environment variables in at build time, so a
-   change doesn't take effect until the next deployment.
-3. Everyone who has already connected must press **Disconnect** then connect
-   again in Settings. Their stored tokens were issued by the old app and the
-   new one will not accept them.
+   - `MS_TENANT_ID` → `organizations`
 
-The secret expires 24 months from creation. Put the date in a calendar: when it
-lapses, every connection stops at once, and the symptom — all mailboxes
-silently stopping — looks nothing like the cause.
+   That literal word, not an ID. It tells Microsoft to accept a work or school
+   account from any directory, which is what multi-tenant means. `MS_CLIENT_ID`
+   and `MS_CLIENT_SECRET` do not change.
+2. **Redeploy.** Vercel bakes environment variables in at build time, so the
+   change does nothing until the next deployment.
+3. Connections made before the change keep working — same app, same secret, so
+   the refresh tokens stay valid. Nobody needs to reconnect.
+
+## What multi-tenant actually widens
+
+Any Microsoft work account, in any organisation, could in principle consent to
+this app. In practice the exposure is bounded by the CRM itself: the only way
+to reach the connect button is to be signed in to Mission Control, and accounts
+there are created by an administrator. Someone outside ADEX would need a CRM
+login before any of this is reachable.
+
+Worth knowing, not worth losing sleep over — and it is the price of having both
+companies' mailboxes in one CRM, which is the requirement.
+
+The client secret still expires 24 months from creation. Put the date in a
+calendar: when it lapses every connection stops at once, and the symptom — all
+mailboxes silently stopping — looks nothing like the cause.

@@ -24,6 +24,30 @@ export async function GET(request: NextRequest) {
     return back(request, `Microsoft refused the connection: ${error}${detail ? ` — ${detail}` : ""}`);
   }
 
+  // An administrator approving the app for their whole organisation comes
+  // back here too, but with `admin_consent` and no `code` — there is no
+  // mailbox to connect, because they were consenting on everyone's behalf.
+  //
+  // Answered with a page rather than the usual redirect to Settings: the
+  // person doing this is a Microsoft admin, who may well have no CRM login,
+  // and bouncing them to a sign-in screen looks exactly like a failure.
+  if (params.get("admin_consent")) {
+    const tenantId = params.get("tenant") ?? "your organisation";
+    console.log("[ms] admin consent granted for tenant:", tenantId);
+    return new NextResponse(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+        `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+        `<title>Consent granted</title>` +
+        `<style>body{font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1.5rem;line-height:1.6;color:#0d1b2a}` +
+        `code{background:#f1f4f8;padding:.1rem .35rem;border-radius:4px;font-size:.9em}</style></head><body>` +
+        `<h1>Consent granted</h1>` +
+        `<p>ADEX Mission Control is now approved for directory <code>${tenantId.replace(/[^a-zA-Z0-9-]/g, "")}</code>.</p>` +
+        `<p>Nothing further is needed from you. Staff can now link their own mailbox from the CRM&rsquo;s Settings page, and each of them still approves that individually.</p>` +
+        `</body></html>`,
+      { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }
+    );
+  }
+
   const code = params.get("code");
   const state = params.get("state");
   const expectedState = request.cookies.get("ms_oauth_state")?.value;
