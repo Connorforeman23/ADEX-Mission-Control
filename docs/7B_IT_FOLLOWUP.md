@@ -1,90 +1,100 @@
-# Follow-up to IT — make the app registration multi-tenant
+# Follow-up to IT — make the ADEX Mission Control app multi-tenant
 
-*Follows the request in [7B_IT_REQUEST.md](7B_IT_REQUEST.md). The permissions,
-redirect URIs and secret from that request are all correct and unchanged. One
-setting needs to change, and one approval needs granting.*
+*Follows [7B_IT_REQUEST.md](7B_IT_REQUEST.md). The app registration exists and
+is correctly named; two settings on it need changing, and a new secret is
+needed. Connor cannot make these changes himself — they are admin-restricted.*
 
-**Why multi-tenant rather than moving it:** Connor uses the CRM with mailboxes
-in both Clear Focus Management and Advertising Excellence. A single-tenant app
-can only ever serve one of them, so the app has to accept both directories.
-The original request asked for single tenant, which was wrong about this
-requirement — that part is on us, not IT.
+**The app:** `ADEX Mission Control`, Application (client) ID
+`d5070f62-f6d8-4024-adee-e2d69f9f12be`.
+
+**Why multi-tenant:** Connor runs the CRM with mailboxes in two directories —
+Advertising Excellence and Clear Focus Management — and needs both connected.
+A single-tenant app can only ever serve one. The original request asked for
+single tenant, which was our specification missing that requirement, not IT
+building it wrong.
 
 ---
 
-**Subject:** ADEX Mission Control — one setting change on the app registration
+**Subject:** ADEX Mission Control — two settings on the app registration, plus a new secret
 
 Hi,
 
-Thanks for setting up the app registration for ADEX Mission Control. There's
-one setting that needs changing before the team can use it. The permissions,
-redirect URIs and secret are all correct — please don't change those.
+Thanks for setting up the `ADEX Mission Control` app registration. I've hit two
+things I can't change myself because they need admin rights, and I need one new
+secret. All three are below.
 
-**What's happening**
+The app is **ADEX Mission Control**, Application (client) ID
+`d5070f62-f6d8-4024-adee-e2d69f9f12be`.
 
-When anyone with an `@advertisingexcellence.co.uk` account tries to connect
-their mailbox, Microsoft turns them away:
+**1. Please change it to multi-tenant**
 
-> Selected user account does not exist in tenant 'Clear Focus Management' and
-> cannot access the application 'a806aba2-4c4c-4b4f-8fa5-dda727795533' in that
-> tenant. The account needs to be added as an external user in the tenant
-> first. Please use a different account.
-
-**Why**
-
-The app lives in the Clear Focus Management directory and is registered as
-single-tenant, so it only accepts sign-ins from that directory. Our staff are
-in the Advertising Excellence directory.
-
-I need it to work for both — I use the CRM with mailboxes in each. So rather
-than moving it, please make the app multi-tenant.
-
-**Change 1 — on the existing registration (Clear Focus Management directory)**
-
-Entra admin centre → App registrations → `ADEX Mission Control`
-(`a806aba2-4c4c-4b4f-8fa5-dda727795533`) → **Authentication** → Supported
-account types:
+Entra admin centre → App registrations → **ADEX Mission Control** →
+**Authentication** → Supported account types:
 
 | From | To |
 |---|---|
 | Accounts in this organizational directory only | **Accounts in any organizational directory (Any Microsoft Entra ID tenant — Multitenant)** |
 
-Save. Nothing else on that page changes — the redirect URIs stay as they are,
-implicit grant stays off, public client flows stay off.
+Please pick the **Multitenant** option, not the one that also includes personal
+Microsoft accounts — this should be work and school accounts only.
 
-Please choose the **Multitenant** option, not the one that also includes
-personal Microsoft accounts. This should be work and school accounts only.
+*Why:* I use the CRM with mailboxes in two companies, and I need both to
+connect. A single-tenant app can only ever accept one of them.
 
-**Change 2 — approve it in the Advertising Excellence directory**
+**2. Please confirm the redirect URIs**
 
-A multi-tenant app still has to be approved by each organisation that uses it.
-Someone with Global Administrator or Privileged Role Administrator in the
-**Advertising Excellence** directory needs to open this link, sign in with
-their Advertising Excellence account, and approve:
+On the same Authentication page, these two need to be listed under **Web**.
+Please add either if it's missing:
 
-```
-https://login.microsoftonline.com/common/adminconsent?client_id=a806aba2-4c4c-4b4f-8fa5-dda727795533&redirect_uri=https://adex-mission-control.vercel.app/api/microsoft/callback
-```
+- `https://adex-mission-control.vercel.app/api/microsoft/callback`
+- `https://adex-mission-control-git-dev-adex3.vercel.app/api/microsoft/callback`
 
-It will list the same delegated permissions as before — `User.Read`,
-`Mail.Read`, `Mail.Send`, `Calendars.Read`, `Calendars.ReadWrite`,
-`offline_access`. Approving shows a short "Consent granted" page; there's
-nothing to do after that, and no CRM account is needed to do it.
+The second is our test environment. Implicit grant stays unticked; allow public
+client flows stays **No**.
 
-To be clear about what this grants: these are **delegated** permissions only.
-The CRM can act only for a person who has signed in and linked their own
-mailbox, and only on that person's own mail and calendar. It cannot read
+**3. Please confirm the permissions, and grant admin consent**
+
+**API permissions** → these six, all **Delegated**, Microsoft Graph. Please add
+any that are missing:
+
+| Permission | What it is for |
+|---|---|
+| `User.Read` | Identify who has signed in |
+| `Mail.Read` | File client and supplier emails against the right company |
+| `Mail.Send` | One summary email per person at 09:30 |
+| `Calendars.Read` | Show a person's meetings in the CRM |
+| `Calendars.ReadWrite` | Put a task the person themselves timed into their own calendar |
+| `offline_access` | Stay connected without asking them to sign in daily |
+
+Then **Grant admin consent for Advertising Excellence Ltd**, so staff aren't
+each blocked or prompted when they sign in.
+
+Please do **not** add any *Application* permissions. These are all delegated,
+which means the CRM can only ever act for a person who has signed in and linked
+their own mailbox, on that person's own mail and calendar. It cannot read
 anyone else's, and it cannot do anything when nobody is signed in.
 
-**Please confirm back**
+**4. Please issue a new client secret**
 
-1. That the app is now multitenant
-2. That admin consent has been granted in the Advertising Excellence directory
+**Certificates & secrets** → **New client secret** → description `Vercel`,
+expiry **24 months**.
+
+The value is shown once, on creation, so please copy it then and send it to me
+**securely — not in plain email**. A password manager share, or a Teams message
+you delete afterwards, is fine.
+
+**Please send back**
+
+1. The **client secret value** (securely, as above)
+2. The secret's **expiry date**, so I can diary it — when it lapses, every
+   connection stops at once
 3. The **Directory (tenant) ID** for Advertising Excellence, for our records
+4. Confirmation that the app is now multitenant and admin consent has been
+   granted
 
-Nothing needs re-issuing — the client ID and secret stay the same.
+The Application (client) ID I already have.
 
-**Still outstanding from the original request:** is our shared drive on
+**Still outstanding from my original request:** is our shared drive on
 SharePoint / OneDrive, or a server in the office? We'd like Space Orders filed
 to the client's folder automatically when they're sent, which is straightforward
 if the drive is in 365 and not possible if it's on a server here.
@@ -94,31 +104,36 @@ Connor
 
 ---
 
-## What happens at our end once they confirm
+## What Connor does once they reply
 
-1. In Vercel → Settings → Environment Variables, change **one** variable for
-   **Production and Preview**:
-   - `MS_TENANT_ID` → `organizations`
+In Vercel → Settings → Environment Variables, set all three for **Production
+and Preview**, then **Redeploy** (Vercel bakes these in at build time, so
+nothing changes until the next deployment):
 
-   That literal word, not an ID. It tells Microsoft to accept a work or school
-   account from any directory, which is what multi-tenant means. `MS_CLIENT_ID`
-   and `MS_CLIENT_SECRET` do not change.
-2. **Redeploy.** Vercel bakes environment variables in at build time, so the
-   change does nothing until the next deployment.
-3. Connections made before the change keep working — same app, same secret, so
-   the refresh tokens stay valid. Nobody needs to reconnect.
+| Variable | Value |
+|---|---|
+| `MS_CLIENT_ID` | `d5070f62-f6d8-4024-adee-e2d69f9f12be` |
+| `MS_TENANT_ID` | `organizations` — that literal word, not an ID |
+| `MS_CLIENT_SECRET` | the new secret value from IT |
 
-## What multi-tenant actually widens
+`MS_TENANT_ID` being the word `organizations` is what tells Microsoft to accept
+a work account from any directory, which is the point of multi-tenant.
+
+**Note the client ID is changing.** Vercel currently points at
+`a806aba2-4c4c-4b4f-8fa5-dda727795533`, which is not the app registration that
+exists — that mismatch is why nothing was connecting. Anyone already connected
+will need to disconnect and reconnect in Settings afterwards, because their
+tokens were issued by the old app.
+
+Then everyone connects their own mailbox at
+https://adex-mission-control.vercel.app/settings — Connor's
+`@clearfocusmgmt.co.uk` account included, which is what the multi-tenant change
+buys.
+
+## What multi-tenant widens
 
 Any Microsoft work account, in any organisation, could in principle consent to
-this app. In practice the exposure is bounded by the CRM itself: the only way
-to reach the connect button is to be signed in to Mission Control, and accounts
-there are created by an administrator. Someone outside ADEX would need a CRM
-login before any of this is reachable.
-
-Worth knowing, not worth losing sleep over — and it is the price of having both
-companies' mailboxes in one CRM, which is the requirement.
-
-The client secret still expires 24 months from creation. Put the date in a
-calendar: when it lapses every connection stops at once, and the symptom — all
-mailboxes silently stopping — looks nothing like the cause.
+this app. In practice the exposure is bounded by the CRM: the only route to the
+connect button is a Mission Control login, and those are created by an
+administrator. Worth knowing; it is the price of having both companies'
+mailboxes in one CRM.
