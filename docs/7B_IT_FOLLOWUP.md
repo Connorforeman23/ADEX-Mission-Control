@@ -124,16 +124,15 @@ you delete afterwards, is fine.
 
 The Application (client) ID I already have.
 
-**One question I still need answered, and it decides whether point 3 above is
-worth granting at all:** is our shared drive on SharePoint / OneDrive, or a
-server in the office?
+**One last thing.** Our shared drive is on SharePoint and OneDrive, which is
+what makes the filing above possible — so `Files.ReadWrite.All` does earn its
+place.
 
-If it is in 365, the filing described above works and `Files.ReadWrite.All`
-earns its place. If the drive is a server here, the CRM runs in the cloud and
-cannot reach it, so please leave that permission off and I will find another
-way. Either answer is useful — I just need to know which.
-
-If it is on SharePoint, the path to the Space Orders folder would help too.
+Could you send me the **site and library path to the folder where Space Orders
+are filed**? Something like
+`https://advertisingexcellence.sharepoint.com/sites/<site>/<library>/<folder>`.
+The CRM needs to know where to put them, and it will only ever touch that
+folder.
 
 Thanks,
 Connor
