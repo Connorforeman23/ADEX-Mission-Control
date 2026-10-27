@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { requireFullAccess, getMyProfile } from "@/lib/queries";
@@ -108,6 +109,25 @@ export default async function SettingsPage() {
         <Suspense fallback={null}>
           <XeroPanel />
         </Suspense>
+      )}
+
+      {/* Bulk history. Admin only, because a mistake here is a mistake
+          across a year of bookings rather than one. */}
+      {isAdmin && (
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-body" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div className="grow" style={{ minWidth: 220 }}>
+              <p style={{ margin: 0, fontWeight: 560 }}>Import bookings</p>
+              <small className="sub-line">
+                Load a year of history from a spreadsheet. Nothing is written until you have
+                seen what it will do.
+              </small>
+            </div>
+            <Link className="btn" href="/import">
+              Open
+            </Link>
+          </div>
+        </section>
       )}
 
       {isAdmin && <ActivityLog />}

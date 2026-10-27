@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { draftInvoiceLines, dueDateFor, monthEnd } from "@/lib/invoice";
 import { parseSelectedDates } from "@/lib/dates";
 import type { Campaign } from "@/lib/money";
+import type { ImportOutcome } from "@/lib/import-bookings";
 
 export type LineInput = {
   id?: string;
@@ -2002,4 +2003,174 @@ export async function saveClientBrief(id: string, clientBrief: string) {
 
   revalidatePath(`/proposals/${id}`);
   return {};
+}
+
+// --- importing a year of bookings ----------------------------------------
+
+/**
+ * Load bookings from a spreadsheet.
+ *
+ * Written to be run twice without fear. Anyone loading a year of history will
+ * do it in pieces, find a mistake, fix the file and run it again — so a line
+ * that is already on the books is skipped rather than duplicated, and a
+ * campaign that already exists gains the new lines rather than being created
+ * a second time.
+ *
+ * `dryRun` does everything except write, which is what the preview uses: the
+ * counts it reports are produced by the same code that will do the work, not
+ * by a second implementation that can drift from it.
+ */
+export async function importBookings(
+  csv: string,
+  dryRun: boolean
+): Promise<ImportOutcome> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You need to be signed in.", problems: [] };
+
+  const { parseBookingCsv, groupForImport } = await import("@/lib/import-bookings");
+  const { lines, problems, ignoredColumns } = parseBookingCsv(csv);
+  if (!lines.length) {
+    return {
+      ok: false,
+      error: problems[0]?.problem ?? "Nothing in that file looked like a booking.",
+      problems,
+    };
+  }
+
+  const groups = groupForImport(lines);
+
+  // Everything already on the books, read once rather than per row.
+  const [{ data: clientRows }, { data: campaignRows }] = await Promise.all([
+    supabase.from("clients").select("id, name"),
+    supabase.from("campaigns").select("id, name, client_id"),
+  ]);
+  const clientsByName = new Map<string, string>(
+    (clientRows ?? []).map((c: { id: string; name: string }) => [c.name.toLowerCase(), c.id])
+  );
+  const campaignsByKey = new Map<string, string>(
+    (campaignRows ?? []).map((c: { id: string; name: string; client_id: string }) => [
+      `${c.client_id}\u0000${c.name.toLowerCase()}`,
+      c.id,
+    ])
+  );
+
+  const created = { clients: 0, campaigns: 0, lines: 0 };
+  const skipped: string[] = [];
+  const failures: string[] = [];
+
+  for (const g of groups) {
+    // --- the client ------------------------------------------------------
+    let clientId = clientsByName.get(g.client.toLowerCase());
+    if (!clientId) {
+      created.clients++;
+      if (!dryRun) {
+        const { data, error } = await supabase
+          .from("clients")
+          .insert({ name: g.client, owner_id: user.id })
+          .select("id")
+          .single();
+        if (error || !data) {
+          failures.push(`${g.client}: ${error?.message ?? "could not be created"}`);
+          continue;
+        }
+        const newClientId = data.id as string;
+        clientId = newClientId;
+        clientsByName.set(g.client.toLowerCase(), newClientId);
+      } else {
+        // A placeholder so the campaign below can be counted in the preview.
+        clientId = `new:${g.client.toLowerCase()}`;
+      }
+    }
+
+    // --- the campaign ----------------------------------------------------
+    const campaignKey = `${clientId}\u0000${g.campaign.toLowerCase()}`;
+    let campaignId = campaignsByKey.get(campaignKey);
+    const campaignExisted = Boolean(campaignId);
+    if (!campaignId) {
+      created.campaigns++;
+      if (!dryRun) {
+        const { data, error } = await supabase
+          .from("campaigns")
+          .insert({
+            ref: await nextRef(supabase),
+            name: g.campaign,
+            client_id: clientId,
+            // Historic work, so it is finished unless the dates say otherwise.
+            status: g.end >= new Date().toISOString().slice(0, 10) ? "booked" : "done",
+            owner_id: user.id,
+            start_date: g.start,
+            end_date: g.end,
+            client_po: g.clientPo || null,
+            note: "Imported from spreadsheet",
+          })
+          .select("id")
+          .single();
+        if (error || !data) {
+          failures.push(`${g.campaign}: ${error?.message ?? "could not be created"}`);
+          continue;
+        }
+        const newCampaignId = data.id as string;
+        campaignId = newCampaignId;
+        campaignsByKey.set(campaignKey, newCampaignId);
+      } else {
+        campaignId = `new:${campaignKey}`;
+      }
+    }
+
+    // --- the lines -------------------------------------------------------
+    // Only a campaign that already existed can hold a line we have seen
+    // before, so the comparison is only fetched when it can matter.
+    let existing: { vendor: string; start_date: string; supplier_gross: number }[] = [];
+    if (campaignExisted) {
+      const { data } = await supabase
+        .from("campaign_lines")
+        .select("vendor, start_date, supplier_gross")
+        .eq("campaign_id", campaignId);
+      existing = (data ?? []) as typeof existing;
+    }
+    const seen = new Set(
+      existing.map((e) => `${e.vendor.toLowerCase()}\u0000${e.start_date}\u0000${Number(e.supplier_gross)}`)
+    );
+
+    for (const l of g.lines) {
+      const fingerprint = `${l.supplier.toLowerCase()}\u0000${l.start}\u0000${l.supplierGross}`;
+      if (seen.has(fingerprint)) {
+        skipped.push(`Row ${l.row}: ${l.supplier} on ${l.start} is already on ${g.campaign}.`);
+        continue;
+      }
+      seen.add(fingerprint);
+      created.lines++;
+      if (dryRun) continue;
+
+      const { error } = await supabase.from("campaign_lines").insert({
+        campaign_id: campaignId,
+        channel: l.channel,
+        vendor: l.supplier,
+        publication: l.publication || null,
+        detail: l.detail || null,
+        // An order number from the old system comes across as it is. The
+        // counter notices it and carries on above it, so the CRM never
+        // reissues a number a supplier already has.
+        supplier_po: l.po || null,
+        line_type: l.lineType,
+        start_date: l.start,
+        end_date: l.end,
+        commission_pct: l.commissionPct,
+        supplier_gross: l.supplierGross,
+        client_charge: l.clientCharge,
+      });
+      if (error) failures.push(`Row ${l.row}: ${error.message}`);
+    }
+  }
+
+  if (!dryRun) {
+    revalidatePath("/campaigns");
+    revalidatePath("/clients");
+    revalidatePath("/organisations");
+  }
+
+  return { ok: true, created, problems, skipped, failures, ignoredColumns, groups: groups.length };
 }
