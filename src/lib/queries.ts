@@ -1335,3 +1335,27 @@ export async function getLogoOwnerNames(): Promise<string[]> {
     .order("name");
   return ((data ?? []) as { name: string }[]).map((o) => o.name);
 }
+
+/** Keys issued to outside systems. Admin only — RLS sees to that. */
+export async function getApiKeys() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("api_keys")
+    .select("id, label, created_at, last_used_at, revoked_at, profiles!api_keys_owner_id_fkey ( full_name )")
+    .order("created_at", { ascending: false });
+  return ((data ?? []) as unknown as {
+    id: string;
+    label: string;
+    created_at: string;
+    last_used_at: string | null;
+    revoked_at: string | null;
+    profiles: { full_name: string } | null;
+  }[]).map((k) => ({
+    id: k.id,
+    label: k.label,
+    owner: k.profiles?.full_name ?? "—",
+    createdAt: k.created_at,
+    lastUsedAt: k.last_used_at,
+    revokedAt: k.revoked_at,
+  }));
+}

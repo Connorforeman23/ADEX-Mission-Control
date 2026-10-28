@@ -2174,3 +2174,35 @@ export async function importBookings(
 
   return { ok: true, created, problems, skipped, failures, ignoredColumns, groups: groups.length };
 }
+
+// --- read-only API keys for another system -------------------------------
+
+/**
+ * Issue a key for an outside system to read one person's clients.
+ *
+ * The key comes back once and is never stored — only its hash is. That is
+ * deliberate: a lost key is replaced rather than looked up, so this table
+ * leaking is not the same as access leaking.
+ */
+export async function createApiKey(label: string, ownerId: string) {
+  const supabase = await createClient();
+  if (!label.trim()) return { error: "Give the key a name, so you know what it is for." };
+  if (!ownerId) return { error: "Choose whose clients it may read." };
+
+  const { data, error } = await supabase.rpc("api_key_create", {
+    p_label: label.trim(),
+    p_owner: ownerId,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings");
+  return { key: data as string };
+}
+
+export async function revokeApiKey(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("api_key_revoke", { p_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  return {};
+}
