@@ -97,12 +97,26 @@ async function tokenRequest(body: Record<string, string>) {
     // Microsoft's errors are genuinely helpful; pass them through rather than
     // hiding them behind "something went wrong".
     let detail = text;
+    let code = "";
     try {
       const j = JSON.parse(text);
       detail = j.error_description || j.error || text;
+      code = j.error ?? "";
     } catch {
       /* not JSON — use the raw text */
     }
+
+    // A refresh token belongs to the app registration that issued it. Point
+    // the CRM at a different app — as we did when the client ID turned out to
+    // be wrong — and every existing connection starts failing with this,
+    // which reads like a fault rather than the one-click fix it is.
+    if (code === "invalid_grant" || /AADSTS70000|AADSTS700082|AADSTS54005/.test(detail)) {
+      throw new Error(
+        "This connection was made under the old Microsoft setup, so it has to be remade. " +
+          "Press Disconnect, then connect again — it takes a few seconds and nothing is lost."
+      );
+    }
+
     throw new Error(`Microsoft sign-in failed (${res.status}): ${detail}`);
   }
   return JSON.parse(text) as TokenResponse;
