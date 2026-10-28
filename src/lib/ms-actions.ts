@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { graph, msConfigured } from "@/lib/microsoft";
+import { graph, msClientId, msConfigured, msTenant } from "@/lib/microsoft";
 import type { MsStatus } from "@/lib/ms-types";
 
 // Server actions for the Microsoft panel. Everything acts as the signed-in
@@ -19,6 +19,8 @@ export async function getMsStatus(): Promise<MsStatus> {
     accountName: null,
     connectedAt: null,
     lastSyncAt: null,
+    clientId: msClientId() || null,
+    tenant: msTenant() || null,
   };
   if (!configured) return blank;
 
@@ -44,6 +46,8 @@ export async function getMsStatus(): Promise<MsStatus> {
       accountName: row.account_name,
       connectedAt: row.connected_at,
       lastSyncAt: row.last_sync_at,
+      clientId: msClientId() || null,
+      tenant: msTenant() || null,
     };
   } catch (e) {
     // A failed status check must never hang the Settings page.

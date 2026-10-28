@@ -25,6 +25,33 @@ function when(iso: string | null) {
     : d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Which app registration this build is actually using.
+ *
+ * A client ID is public — Microsoft prints it on its own error screen —
+ * so showing it costs nothing. It is here because Vercel bakes environment
+ * variables in at build time, and without seeing the value the only way to
+ * tell whether a deployment had picked up a change was to attempt a
+ * sign-in and read the failure. That cost an afternoon.
+ */
+function Build({ status }: { status: MsStatus }) {
+  if (!status.clientId) return null;
+  return (
+    <div className="row">
+      <small className="sub-line" style={{ opacity: 0.75 }}>
+        This build signs in against app <code>{status.clientId}</code>
+        {status.tenant ? (
+          <>
+            {" in "}
+            <code>{status.tenant}</code>
+          </>
+        ) : null}
+        . If a change in Vercel is not showing here, the site has not rebuilt since.
+      </small>
+    </div>
+  );
+}
+
 export default function MicrosoftPanel() {
   const params = useSearchParams();
   const [status, setStatus] = useState<MsStatus | null>(null);
@@ -45,6 +72,8 @@ export default function MicrosoftPanel() {
           accountName: null,
           connectedAt: null,
           lastSyncAt: null,
+          clientId: null,
+          tenant: null,
         });
       });
   }, []);
@@ -148,6 +177,7 @@ export default function MicrosoftPanel() {
                 Outlook calendar.
               </small>
             </div>
+            <Build status={status} />
           </div>
         ) : (
           <>

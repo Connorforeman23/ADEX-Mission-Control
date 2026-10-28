@@ -16,7 +16,8 @@ import { createClient } from "@/lib/supabase/server";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
-function tenant() {
+/** The directory the sign-in is sent to: a tenant id, or 'organizations'. */
+export function msTenant() {
   return (process.env.MS_TENANT_ID ?? "").trim();
 }
 export function msClientId() {
@@ -28,10 +29,10 @@ function msClientSecret() {
 
 /** Microsoft is optional — the app must run perfectly well without it. */
 export function msConfigured() {
-  return Boolean(msClientId() && msClientSecret() && tenant());
+  return Boolean(msClientId() && msClientSecret() && msTenant());
 }
 
-const authority = () => `https://login.microsoftonline.com/${tenant() || "common"}`;
+const authority = () => `https://login.microsoftonline.com/${msTenant() || "common"}`;
 
 /**
  * What we ask Microsoft for, and why — nothing wider:
