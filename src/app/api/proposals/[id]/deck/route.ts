@@ -27,9 +27,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // Logos come from the CRM, so nobody sources an image by hand: the media
   // owners' by name, the client's from its own organisation record.
   const supabase = await createClient();
-  const [logos, { data: org }] = await Promise.all([
+  const [logos, { data: org }, { data: owner }] = await Promise.all([
     getSupplierLogos(),
     supabase.from("organisations").select("logo, website").eq("id", proposal.organisationId).maybeSingle(),
+    // Who to call, for a closing slide that does not say: whoever owns the
+    // proposal. Title and phone are not held in the CRM, so they only appear
+    // when the brief supplies them.
+    proposal.ownerId
+      ? supabase.from("profiles").select("full_name, email").eq("id", proposal.ownerId).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const content = proposal.content as Partial<DeckSpec>;
@@ -40,7 +46,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     clientDomain: content.clientDomain ?? org?.website ?? undefined,
     clientLogo: content.clientLogo ?? org?.logo ?? undefined,
     supplierLogos: logos,
-    slides: content.slides ?? [],
+    slides: (content.slides ?? []).map((slide) =>
+      slide.layout === "closing" && !slide.contact && owner?.full_name
+        ? { ...slide, contact: { name: owner.full_name, ...(owner.email ? { email: owner.email } : {}) } }
+        : slide
+    ),
   };
 
   const buffer = await buildProposalDeck(spec);

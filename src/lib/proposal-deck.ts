@@ -6,7 +6,9 @@ import PptxGenJS from "pptxgenjs";
 import {
   BRAND,
   FONTS,
+  type Bar,
   type Column,
+  type Contact,
   type DeckSpec,
   type Figure,
   type IconRow,
@@ -100,7 +102,9 @@ function wrappedLines(text: string, widthIn: number, fontSize: number) {
  */
 function heading(slide: PptxGenJS.Slide, s: SlideSpec, dark: boolean): number {
   const ink = dark ? BRAND.white : BRAND.ink;
-  const textW = W - M * 2 - 1.5;
+  // A media owner's logo shares the top right with the ADEX mark, so a
+  // branded slide's headline stops short of both rather than running under.
+  const textW = W - M * 2 - (s.brand ? 3.4 : 1.5);
   const headTop = s.eyebrow ? 0.72 : 0.52;
   const headH = wrappedLines(s.headline, textW, 31) * 0.52;
   if (s.eyebrow) {
@@ -471,20 +475,308 @@ function coverGeometry(slide: PptxGenJS.Slide) {
   });
 }
 
+/**
+ * Figures in cards — the Lodges spend breakdown. Each card is the light
+ * wash; the one flagged `emphasis` (the total, as a rule) is navy, which is
+ * how Lodges tells the reader which number to take away.
+ */
+function cards(slide: PptxGenJS.Slide, list: Figure[], x: number, y: number, w: number) {
+  const n = Math.min(list.length, 4);
+  if (!n) return y;
+  const gap = 0.2;
+  // Side by side while each card keeps a readable width; in a narrow column
+  // they stack instead, as the Lodges Sky slide does beside its chart.
+  const across = (w - gap * (n - 1)) / n >= 1.9;
+  const cw = across ? (w - gap * (n - 1)) / n : w;
+  const ch = across ? 1.22 : 1.06;
+  list.slice(0, n).forEach((f, i) => {
+    const cx = across ? x + i * (cw + gap) : x;
+    const cy = across ? y : y + i * (ch + gap);
+    const navy = Boolean(f.emphasis);
+    slide.addShape("roundRect", {
+      x: cx,
+      y: cy,
+      w: cw,
+      h: ch,
+      rectRadius: 0.05,
+      fill: { color: navy ? BRAND.ink : BRAND.wash },
+      line: { type: "none" },
+    });
+    slide.addText(f.value, {
+      x: cx + 0.2,
+      y: cy + 0.14,
+      w: cw - 0.4,
+      h: 0.5,
+      isTextBox: true,
+      margin: 0,
+      fontFace: FONTS.heading,
+      fontSize: 24,
+      bold: true,
+      color: navy ? BRAND.white : BRAND.ink,
+    });
+    slide.addText(f.label, {
+      x: cx + 0.2,
+      y: cy + 0.62,
+      w: cw - 0.4,
+      h: 0.24,
+      isTextBox: true,
+      margin: 0,
+      fontFace: FONTS.body,
+      fontSize: 10.5,
+      bold: true,
+      color: navy ? BRAND.white : BRAND.ink,
+    });
+    if (f.note) {
+      slide.addText(f.note, {
+        x: cx + 0.2,
+        y: cy + 0.84,
+        w: cw - 0.4,
+        h: 0.22,
+        isTextBox: true,
+        margin: 0,
+        fontFace: FONTS.body,
+        fontSize: 9,
+        color: navy ? BRAND.line : BRAND.label,
+      });
+    }
+  });
+  return (across ? y + ch : y + n * (ch + gap) - gap) + 0.26;
+}
+
+/**
+ * The cream panel: the reasoning that sits beside the numbers. Distinct from
+ * the navy strip, which is the one line the slide exists to make — a callout
+ * is the paragraph that explains why.
+ */
+function callout(
+  slide: PptxGenJS.Slide,
+  head: string | undefined,
+  text: string,
+  x: number,
+  y: number,
+  w: number
+) {
+  const pad = 0.24;
+  const bodyH = Math.max(0.5, wrappedLines(text, w - pad * 2, 11.5) * 0.21);
+  const h = pad + (head ? 0.36 : 0) + bodyH + pad;
+  slide.addShape("roundRect", {
+    x,
+    y,
+    w,
+    h,
+    rectRadius: 0.05,
+    fill: { color: BRAND.cream },
+    line: { type: "none" },
+  });
+  let cy = y + pad;
+  if (head) {
+    slide.addText(head, {
+      x: x + pad,
+      y: cy,
+      w: w - pad * 2,
+      h: 0.3,
+      isTextBox: true,
+      margin: 0,
+      fontFace: FONTS.heading,
+      fontSize: 13,
+      bold: true,
+      color: BRAND.ink,
+    });
+    cy += 0.36;
+  }
+  slide.addText(text, {
+    x: x + pad,
+    y: cy,
+    w: w - pad * 2,
+    h: bodyH,
+    isTextBox: true,
+    margin: 0,
+    fontFace: FONTS.body,
+    fontSize: 11.5,
+    color: BRAND.slate,
+    valign: "top",
+    lineSpacingMultiple: 1.15,
+  });
+  return y + h + 0.24;
+}
+
+/**
+ * A horizontal bar chart, drawn as shapes rather than a PowerPoint chart.
+ *
+ * A native chart would be editable as data, but it takes the theme's colours
+ * and fonts on its own terms and rarely lands on-brand. Shapes are exactly
+ * the Lodges look every time, and a bar can still be dragged to length in
+ * PowerPoint if a figure changes after the deck is built.
+ */
+function barChart(slide: PptxGenJS.Slide, bars: Bar[], x: number, y: number, w: number) {
+  const rows = bars.slice(0, 8);
+  if (!rows.length) return y;
+  const max = Math.max(...rows.map((b) => b.value), 1);
+  const labelW = Math.min(1.9, w * 0.34);
+  const valueW = 0.6;
+  const trackW = w - labelW - valueW - 0.16;
+  const rowH = 0.36;
+  rows.forEach((b, i) => {
+    const ry = y + i * rowH;
+    slide.addText(b.label, {
+      x,
+      y: ry,
+      w: labelW - 0.12,
+      h: rowH - 0.06,
+      isTextBox: true,
+      margin: 0,
+      align: "right",
+      valign: "middle",
+      fontFace: FONTS.body,
+      fontSize: 10,
+      color: BRAND.slate,
+    });
+    const bw = Math.max(0.04, (b.value / max) * trackW);
+    slide.addShape("rect", {
+      x: x + labelW,
+      y: ry + 0.06,
+      w: bw,
+      h: rowH - 0.14,
+      fill: { color: BRAND.ink },
+      line: { type: "none" },
+    });
+    slide.addText(String(b.value), {
+      x: x + labelW + bw + 0.08,
+      y: ry,
+      w: valueW,
+      h: rowH - 0.06,
+      isTextBox: true,
+      margin: 0,
+      valign: "middle",
+      fontFace: FONTS.body,
+      fontSize: 10,
+      bold: true,
+      color: BRAND.ink,
+    });
+  });
+  return y + rows.length * rowH + 0.24;
+}
+
+/**
+ * The media owner's logo in the header, to the left of the ADEX mark — every
+ * Lodges channel slide does this, so the reader knows whose inventory they
+ * are looking at before they read a word. Falls back to the name, set in
+ * the same grey caps as a logo row, when the CRM has no logo yet.
+ */
+function mediaOwnerMark(slide: PptxGenJS.Slide, name: string, logos: Record<string, string>) {
+  const boxW = 1.6;
+  const boxH = 0.55;
+  const x = W - M - 0.96 - 0.28 - boxW;
+  const y = 0.45;
+  const art = logos[name.trim().toLowerCase()];
+  if (art) {
+    slide.addImage(fitted(art, x, y, boxW, boxH));
+    return;
+  }
+  slide.addText(name.toUpperCase(), {
+    x,
+    y: y + 0.1,
+    w: boxW,
+    h: 0.34,
+    isTextBox: true,
+    margin: 0,
+    align: "right",
+    fontFace: FONTS.heading,
+    fontSize: 15,
+    bold: true,
+    charSpacing: 0.6,
+    color: BRAND.line,
+  });
+}
+
+/**
+ * The closing slide's content: numbered panels on the navy, as Lodges ends
+ * — "What we need to get this booked", 01 to 04. Takes bullets (a title
+ * each) or numbered rows (a title and a detail each).
+ */
+function closingRows(slide: PptxGenJS.Slide, items: IconRow[], y: number) {
+  const rows = items.slice(0, 5);
+  const w = W - M * 2;
+  const rowH = rows.some((r) => r.detail) ? 0.74 : 0.56;
+  const gap = 0.14;
+  rows.forEach((r, i) => {
+    const ry = y + i * (rowH + gap);
+    slide.addShape("roundRect", {
+      x: M,
+      y: ry,
+      w,
+      h: rowH,
+      rectRadius: 0.05,
+      fill: { color: BRAND.inkSoft },
+      line: { type: "none" },
+    });
+    slide.addText(String(i + 1).padStart(2, "0"), {
+      x: M + 0.24,
+      y: ry,
+      w: 0.6,
+      h: rowH,
+      isTextBox: true,
+      margin: 0,
+      valign: "middle",
+      fontFace: FONTS.heading,
+      fontSize: 16,
+      bold: true,
+      color: BRAND.blue,
+    });
+    slide.addText(
+      r.detail
+        ? [
+            { text: r.label, options: { bold: true, color: BRAND.white, fontSize: 13, breakLine: true } },
+            { text: r.detail, options: { color: BRAND.line, fontSize: 10.5 } },
+          ]
+        : [{ text: r.label, options: { bold: true, color: BRAND.white, fontSize: 13 } }],
+      {
+        x: M + 0.95,
+        y: ry,
+        w: w - 1.2,
+        h: rowH,
+        isTextBox: true,
+        margin: 0,
+        valign: "middle",
+        fontFace: FONTS.body,
+      }
+    );
+  });
+  return y + rows.length * (rowH + gap);
+}
+
+/** Who to call, across the foot of the closing slide. */
+function contactLine(slide: PptxGenJS.Slide, c: Contact) {
+  const parts = [c.name, c.title, c.phone, c.email].filter(Boolean) as string[];
+  if (!parts.length) return;
+  slide.addText(parts.join("   |   "), {
+    x: M,
+    y: H - 0.66,
+    w: W - M * 2,
+    h: 0.26,
+    isTextBox: true,
+    margin: 0,
+    fontFace: FONTS.body,
+    fontSize: 10,
+    color: BRAND.line,
+  });
+}
+
 /** One column of a split, or the single column of a full-width slide. */
 function column(slide: PptxGenJS.Slide, col: Column, x: number, y: number, w: number) {
   let cy = y;
-  if ("heading" in col && col.heading) {
+  if ("heading" in col && col.heading && col.kind !== "callout") {
     subhead(slide, col.heading, x, cy, w);
     cy += 0.46;
   }
   switch (col.kind) {
-    case "prose":
+    case "prose": {
+      const proseH = Math.max(0.4, wrappedLines(col.text, w, 13) * 0.28);
       slide.addText(col.text, {
         x,
         y: cy,
         w,
-        h: 1.9,
+        h: proseH,
         isTextBox: true,
         margin: 0,
         fontFace: FONTS.body,
@@ -493,7 +785,8 @@ function column(slide: PptxGenJS.Slide, col: Column, x: number, y: number, w: nu
         valign: "top",
         lineSpacingMultiple: 1.2,
       });
-      return cy + 2.0;
+      return cy + proseH + 0.22;
+    }
     case "iconRows":
       iconRows(slide, col.rows, x, cy, w);
       return cy + col.rows.length * 0.74 + 0.1;
@@ -503,7 +796,9 @@ function column(slide: PptxGenJS.Slide, col: Column, x: number, y: number, w: nu
     case "table":
       table(slide, col.rows, x, cy, w);
       return cy + col.rows.length * 0.33 + 0.2;
-    case "bullets":
+    case "bullets": {
+      const bulletLines = col.items.reduce((n, t) => n + wrappedLines(t, w - 0.35, 12.5), 0);
+      const bulletH = Math.max(0.4, bulletLines * 0.25 + col.items.length * 0.1);
       slide.addText(
         col.items.map((t, i) => ({
           text: t,
@@ -513,7 +808,7 @@ function column(slide: PptxGenJS.Slide, col: Column, x: number, y: number, w: nu
           x,
           y: cy,
           w,
-          h: 2.4,
+          h: bulletH,
           isTextBox: true,
           margin: 0,
           fontFace: FONTS.body,
@@ -523,7 +818,8 @@ function column(slide: PptxGenJS.Slide, col: Column, x: number, y: number, w: nu
           valign: "top",
         }
       );
-      return cy + 2.5;
+      return cy + bulletH + 0.2;
+    }
     case "image": {
       const h = 2.9;
       if (col.dataUri) {
@@ -567,6 +863,14 @@ function column(slide: PptxGenJS.Slide, col: Column, x: number, y: number, w: nu
       }
       return cy + h + 0.4;
     }
+    case "cards":
+      return cards(slide, col.figures, x, cy, w);
+    case "callout":
+      // The callout carries its own heading inside the panel, so the pink
+      // subhead above is not drawn for it — see the guard at the top.
+      return callout(slide, col.heading, col.text, x, y, w);
+    case "chart":
+      return barChart(slide, col.bars, x, cy, w);
   }
 }
 
@@ -587,6 +891,30 @@ export async function buildProposalDeck(deck: DeckSpec): Promise<Buffer> {
     const dark = s.layout === "cover" || s.layout === "closing";
     const slide = pres.addSlide();
     slide.background = { color: dark ? BRAND.ink : BRAND.white };
+
+    // --- a closing slide with something to say -------------------------
+    // Until now a closing slide drew only its headline and skipped past its
+    // columns, so every "next steps" list was silently left off the deck.
+    // With content it now takes the content header at the top and lists
+    // the steps as numbered panels on the navy, as Lodges ends.
+    const closingItems: IconRow[] =
+      s.layout === "closing"
+        ? (s.columns ?? []).flatMap((c): IconRow[] =>
+            c.kind === "bullets"
+              ? c.items.filter(Boolean).map((t) => ({ label: t, detail: "" }))
+              : c.kind === "iconRows"
+                ? c.rows
+                : []
+          )
+        : [];
+    if (closingItems.length) {
+      coverGeometry(slide);
+      mark(slide, brandMark, true);
+      const top = Math.max(HEAD_BOTTOM, heading(slide, s, true));
+      closingRows(slide, closingItems, top + 0.1);
+      if (s.contact) contactLine(slide, s.contact);
+      continue;
+    }
 
     // --- cover and closing ----------------------------------------------
     if (dark) {
@@ -665,17 +993,20 @@ export async function buildProposalDeck(deck: DeckSpec): Promise<Buffer> {
         });
       }
 
+      if (s.layout === "closing" && s.contact) contactLine(slide, s.contact);
+
       if (s.standfirst) {
+        const underTitle = !s.figures?.length;
         slide.addText(s.standfirst, {
           x: M,
-          y: H - 1.08,
+          y: underTitle ? 4.62 : H - 1.08,
           w: 7.8,
           h: 0.6,
           isTextBox: true,
           margin: 0,
           fontFace: FONTS.body,
-          fontSize: 12,
-          color: BRAND.label,
+          fontSize: underTitle ? 15 : 12,
+          color: BRAND.line,
           valign: "top",
         });
       }
@@ -685,6 +1016,7 @@ export async function buildProposalDeck(deck: DeckSpec): Promise<Buffer> {
     // --- content ---------------------------------------------------------
     page++;
     mark(slide, brandMark, false);
+    if (s.brand) mediaOwnerMark(slide, s.brand, deck.supplierLogos ?? {});
     const headBottom = heading(slide, s, false);
 
     // The old fixed start is the floor, so slides with a one-line headline sit
@@ -697,14 +1029,29 @@ export async function buildProposalDeck(deck: DeckSpec): Promise<Buffer> {
       y += 1.34;
     }
 
-    if (s.layout === "split" && s.columns?.length) {
+    let cols = s.columns ?? [];
+    // A row of cards with two more blocks beneath it spans the slide, and the
+    // other two sit side by side under it — the Lodges channel slide: spend
+    // across the top, the detail left, "Why it's interesting" right.
+    if (cols.length > 2 && cols[0].kind === "cards" && cols[0].figures.length >= 2) {
+      y = cards(slide, cols[0].figures, M, y, W - M * 2);
+      cols = cols.slice(1);
+    }
+
+    if (s.layout === "split" && cols.length) {
       const gap = 0.7;
       const colW = (W - M * 2 - gap) / 2;
-      const leftEnd = column(slide, s.columns[0], M, y, colW);
-      const rightEnd = s.columns[1] ? column(slide, s.columns[1], M + colW + gap, y, colW) : y;
+      let leftEnd = column(slide, cols[0], M, y, colW);
+      let rightEnd = cols[1] ? column(slide, cols[1], M + colW + gap, y, colW) : y;
+      for (const extra of cols.slice(2)) {
+        if (leftEnd <= rightEnd) leftEnd = column(slide, extra, M, leftEnd, colW);
+        else rightEnd = column(slide, extra, M + colW + gap, rightEnd, colW);
+      }
       y = Math.max(leftEnd, rightEnd);
-    } else if (s.columns?.length) {
-      y = column(slide, s.columns[0], M, y, W - M * 2);
+    } else {
+      // Full width draws every block, one under the next. It used to draw
+      // only the first and drop the rest without a word.
+      for (const c of cols) y = column(slide, c, M, y, W - M * 2);
     }
 
     if (s.steps?.length) {
@@ -713,10 +1060,25 @@ export async function buildProposalDeck(deck: DeckSpec): Promise<Buffer> {
       const w = (W - M * 2 - gap * (n - 1)) / n;
       s.steps.slice(0, n).forEach((st, i) => {
         const x = M + i * (w + gap);
+        if (st.value) {
+          slide.addText(st.value, {
+            x,
+            y,
+            w,
+            h: 0.26,
+            isTextBox: true,
+            margin: 0,
+            align: "right",
+            fontFace: FONTS.body,
+            fontSize: 11,
+            bold: true,
+            color: BRAND.ink,
+          });
+        }
         slide.addText(st.label.toUpperCase(), {
           x,
           y,
-          w,
+          w: st.value ? w * 0.6 : w,
           h: 0.26,
           isTextBox: true,
           margin: 0,

@@ -1,6 +1,13 @@
 // The ADEX proposal look, taken from the real decks rather than invented:
-// Affinity Water C-04487, Benson Goldstein v7, Faster Property Solutions and
-// Vintage 2027 Growth Planning.
+// Affinity Water C-04487, Benson Goldstein v7, Faster Property Solutions,
+// Vintage 2027 Growth Planning and Luxury Lodges TV Test.
+//
+// ONE look across all of them (Connor: "just make it the same look across
+// all and use the formats you need on bespoke briefs"). The decks differ in
+// which FORMATS they reach for — Lodges is full of cards, a bar chart and
+// media owner logos in the header; Affinity is typographic — but not in
+// their palette or type. So the formats are a vocabulary, and the brief
+// decides which ones a slide uses.
 //
 // Every colour below is one the decks actually use, by frequency. The pink and
 // the blue are the brand; the navy is what the decks put behind white text;
@@ -26,6 +33,8 @@ export const BRAND = {
   white: "FFFFFF",
   pinkSoft: "E77FA2",
   pinkWash: "F4C6D5",
+  /** The warm panel behind a callout — Lodges' "Why it's interesting". */
+  cream: "F6EFE3",
 } as const;
 
 /**
@@ -53,7 +62,19 @@ export const SLIDE = { w: 13.333, h: 7.5 } as const;
  */
 
 /** A big figure: the number, and a small-caps label beneath it. */
-export type Figure = { value: string; label: string; note?: string };
+export type Figure = {
+  value: string;
+  label: string;
+  note?: string;
+  /** The figure the slide is about — usually the total. Drawn as the navy card. */
+  emphasis?: boolean;
+};
+
+/** One bar of a horizontal bar chart: an index, a share, a reach figure. */
+export type Bar = { label: string; value: number };
+
+/** Who to call. Shown at the foot of the closing slide. */
+export type Contact = { name: string; title?: string; phone?: string; email?: string };
 
 /** A numbered row: navy disc, bold label, grey detail — the Affinity pattern. */
 export type IconRow = { label: string; detail: string };
@@ -66,7 +87,13 @@ export type Column =
   | { kind: "table"; rows: string[][] }
   | { kind: "bullets"; heading?: string; items: string[] }
   /** A picture the author drops in: a photo, a chart, a schematic. */
-  | { kind: "image"; dataUri?: string; caption?: string };
+  | { kind: "image"; dataUri?: string; caption?: string }
+  /** Figures in cards — the Lodges spend breakdown. The emphasised one is navy. */
+  | { kind: "cards"; figures: Figure[] }
+  /** The cream panel: the reasoning beside the numbers, "Why it's interesting". */
+  | { kind: "callout"; heading?: string; text: string }
+  /** A horizontal bar chart — an index, a ranking, a comparison. */
+  | { kind: "chart"; heading?: string; bars: Bar[] };
 
 export type SlideSpec = {
   layout:
@@ -83,12 +110,20 @@ export type SlideSpec = {
   columns?: Column[];
   /** Figures that run across the slide under the headline. */
   figures?: Figure[];
-  steps?: { label: string; title: string; detail?: string }[];
+  steps?: { label: string; title: string; detail?: string; value?: string }[];
   /** Three columns of bullets, for stop / continue / start. */
   lists?: { title: string; items: string[] }[];
   /** Supplier names whose logos run along the foot — the CRM supplies the
    *  images, so nobody sources them by hand. */
   logos?: string[];
+  /**
+   * The media owner this slide is about — ITV, Sky, Prime Video. Its logo
+   * sits in the header beside the ADEX mark, as on every Lodges channel
+   * slide, so a reader knows whose inventory they are looking at.
+   */
+  brand?: string;
+  /** Who to call. Drawn on the closing slide only. */
+  contact?: Contact;
   /** The navy strip: the one point the slide exists to make. */
   strip?: string;
   /**

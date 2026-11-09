@@ -34,6 +34,9 @@ const COLUMN_KINDS: { key: Column["kind"]; label: string }[] = [
   { key: "figures", label: "Big figures" },
   { key: "table", label: "Table" },
   { key: "image", label: "Picture" },
+  { key: "cards", label: "Figures in cards" },
+  { key: "chart", label: "Bar chart" },
+  { key: "callout", label: "Callout panel" },
 ];
 
 const box: React.CSSProperties = {
@@ -96,9 +99,12 @@ function moved<T>(list: T[], from: number, to: number): T[] {
 function FiguresEditor({
   figures,
   onChange,
+  cards = false,
 }: {
   figures: Figure[];
   onChange: (f: Figure[]) => void;
+  /** In cards, each figure can carry a note and one can be the navy total. */
+  cards?: boolean;
 }) {
   return (
     <>
@@ -126,6 +132,37 @@ function FiguresEditor({
               }
             />
           </label>
+          {cards && (
+            <label className="field" style={{ flex: 1 }}>
+              <span>Note (optional)</span>
+              <input
+                className="input"
+                value={f.note ?? ""}
+                placeholder="c. 897k impressions"
+                onChange={(e) =>
+                  onChange(figures.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)))
+                }
+              />
+            </label>
+          )}
+          {cards && (
+            <label
+              className="field"
+              style={{ width: 70, alignItems: "center" }}
+              title="The figure to take away — usually the total. Drawn as the navy card."
+            >
+              <span>Total</span>
+              <input
+                type="checkbox"
+                checked={Boolean(f.emphasis)}
+                onChange={(e) =>
+                  onChange(
+                    figures.map((x, j) => (j === i ? { ...x, emphasis: e.target.checked } : x))
+                  )
+                }
+              />
+            </label>
+          )}
           <RowTools
             onRemove={() => onChange(figures.filter((_, j) => j !== i))}
             onUp={i > 0 ? () => onChange(moved(figures, i, i - 1)) : undefined}
@@ -349,6 +386,12 @@ function ColumnEditor({ col, onChange }: { col: Column; onChange: (c: Column) =>
         });
       case "image":
         return onChange({ kind, caption: "" });
+      case "cards":
+        return onChange({ kind, figures: [{ value: "", label: "" }] });
+      case "chart":
+        return onChange({ kind, heading, bars: [{ label: "", value: 0 }] });
+      case "callout":
+        return onChange({ kind, heading, text: "" });
     }
   }
 
@@ -424,6 +467,82 @@ function ColumnEditor({ col, onChange }: { col: Column; onChange: (c: Column) =>
           <ImageColumn col={col} onChange={onChange} />
         </Group>
       )}
+
+      {col.kind === "cards" && (
+        <Group title="Cards">
+          <FiguresEditor
+            cards
+            figures={col.figures}
+            onChange={(figures) => onChange({ ...col, figures })}
+          />
+        </Group>
+      )}
+
+      {col.kind === "callout" && (
+        <label className="field" style={{ marginTop: 8 }}>
+          <span>Text</span>
+          <textarea
+            className="input"
+            rows={4}
+            value={col.text}
+            onChange={(e) => onChange({ ...col, text: e.target.value })}
+          />
+        </label>
+      )}
+
+      {col.kind === "chart" && (
+        <Group title="Bars">
+          {col.bars.map((b, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 6 }}>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Label</span>
+                <input
+                  className="input"
+                  value={b.label}
+                  placeholder="GB News"
+                  onChange={(e) =>
+                    onChange({
+                      ...col,
+                      bars: col.bars.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)),
+                    })
+                  }
+                />
+              </label>
+              <label className="field" style={{ width: 110 }}>
+                <span>Value</span>
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  value={String(b.value)}
+                  onChange={(e) =>
+                    onChange({
+                      ...col,
+                      bars: col.bars.map((x, j) =>
+                        j === i ? { ...x, value: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 } : x
+                      ),
+                    })
+                  }
+                />
+              </label>
+              <RowTools
+                onRemove={() => onChange({ ...col, bars: col.bars.filter((_, j) => j !== i) })}
+                onUp={i > 0 ? () => onChange({ ...col, bars: moved(col.bars, i, i - 1) }) : undefined}
+                onDown={
+                  i < col.bars.length - 1
+                    ? () => onChange({ ...col, bars: moved(col.bars, i, i + 1) })
+                    : undefined
+                }
+              />
+            </div>
+          ))}
+          <button
+            className="btn"
+            onClick={() => onChange({ ...col, bars: [...col.bars, { label: "", value: 0 }] })}
+          >
+            Add bar
+          </button>
+        </Group>
+      )}
     </div>
   );
 }
@@ -459,6 +578,17 @@ function StepsEditor({
                 value={st.title}
                 onChange={(e) =>
                   set(steps.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))
+                }
+              />
+            </label>
+            <label className="field" style={{ width: 110 }}>
+              <span>Value</span>
+              <input
+                className="input"
+                value={st.value ?? ""}
+                placeholder="£50k"
+                onChange={(e) =>
+                  set(steps.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
                 }
               />
             </label>
@@ -718,6 +848,51 @@ function SlideEditor({
                 onChange={(e) => onChange({ ...slide, footnote: e.target.value })}
               />
             </label>
+            <label className="field">
+              <span>Media owner in the header</span>
+              <input
+                className="input"
+                value={slide.brand ?? ""}
+                placeholder="ITV"
+                list="adex-logo-names"
+                onChange={(e) => onChange({ ...slide, brand: e.target.value || undefined })}
+              />
+            </label>
+            {slide.layout === "closing" && (
+              <label className="field wide">
+                <span>Contact &mdash; name | title | phone | email (blank uses the proposal owner)</span>
+                {/* Read when the field is left, not on every key: as a controlled
+                    input it was re-joined after each keystroke, which stripped
+                    the "|" the moment it was typed — a title could never be
+                    entered. */}
+                <input
+                  className="input"
+                  defaultValue={
+                    slide.contact
+                      ? [slide.contact.name, slide.contact.title, slide.contact.phone, slide.contact.email]
+                          .map((x) => x ?? "")
+                          .join(" | ")
+                          .replace(/( \| )+$/, "")
+                      : ""
+                  }
+                  placeholder="Kate Johnston | Account Director | 07886 677 122 | kate.johnston@…"
+                  onBlur={(e) => {
+                    const [name, title, phone, email] = e.target.value.split("|").map((x) => x.trim());
+                    onChange({
+                      ...slide,
+                      contact: name
+                        ? {
+                            name,
+                            ...(title ? { title } : {}),
+                            ...(phone ? { phone } : {}),
+                            ...(email ? { email } : {}),
+                          }
+                        : undefined,
+                    });
+                  }}
+                />
+              </label>
+            )}
             <label className="field">
               <span>Media owner logos along the foot</span>
               <input
