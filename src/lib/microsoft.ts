@@ -16,7 +16,8 @@ import { createClient } from "@/lib/supabase/server";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
-function tenant() {
+/** The directory the sign-in is sent to: a tenant id, or 'organizations'. */
+export function msTenant() {
   return (process.env.MS_TENANT_ID ?? "").trim();
 }
 export function msClientId() {
@@ -28,10 +29,10 @@ function msClientSecret() {
 
 /** Microsoft is optional — the app must run perfectly well without it. */
 export function msConfigured() {
-  return Boolean(msClientId() && msClientSecret() && tenant());
+  return Boolean(msClientId() && msClientSecret() && msTenant());
 }
 
-const authority = () => `https://login.microsoftonline.com/${tenant() || "common"}`;
+const authority = () => `https://login.microsoftonline.com/${msTenant() || "common"}`;
 
 /**
  * What we ask Microsoft for, and why — nothing wider:
@@ -97,12 +98,26 @@ async function tokenRequest(body: Record<string, string>) {
     // Microsoft's errors are genuinely helpful; pass them through rather than
     // hiding them behind "something went wrong".
     let detail = text;
+    let code = "";
     try {
       const j = JSON.parse(text);
       detail = j.error_description || j.error || text;
+      code = j.error ?? "";
     } catch {
       /* not JSON — use the raw text */
     }
+
+    // A refresh token belongs to the app registration that issued it. Point
+    // the CRM at a different app — as we did when the client ID turned out to
+    // be wrong — and every existing connection starts failing with this,
+    // which reads like a fault rather than the one-click fix it is.
+    if (code === "invalid_grant" || /AADSTS70000|AADSTS700082|AADSTS54005/.test(detail)) {
+      throw new Error(
+        "This connection was made under the old Microsoft setup, so it has to be remade. " +
+          "Press Disconnect, then connect again — it takes a few seconds and nothing is lost."
+      );
+    }
+
     throw new Error(`Microsoft sign-in failed (${res.status}): ${detail}`);
   }
   return JSON.parse(text) as TokenResponse;

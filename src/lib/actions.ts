@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { draftInvoiceLines, dueDateFor, monthEnd } from "@/lib/invoice";
 import { parseSelectedDates } from "@/lib/dates";
 import type { Campaign } from "@/lib/money";
+import type { ImportOutcome } from "@/lib/import-bookings";
 
 export type LineInput = {
   id?: string;
@@ -1653,5 +1654,555 @@ export async function setTaskStatus(id: string, status: "Open" | "Done" | "Parke
   if (error) return { error: error.message };
   revalidatePath("/tasks");
   revalidatePath("/");
+  return {};
+}
+
+// --- organisation logos --------------------------------------------------
+
+/** What an upload is allowed to be, before it is normalised. */
+const MAX_LOGO_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Save a company's logo, for use on proposal decks.
+ *
+ * The file is normalised here rather than trusted: resized to 400px wide,
+ * converted to PNG, and transparency kept so it sits on a dark slide as
+ * happily as a light one. That is what stops a 4MB camera JPEG becoming a row
+ * in the database, and what makes every logo on a slide the same height.
+ */
+export async function saveOrganisationLogo(organisationId: string, dataUri: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in." };
+
+  const match = /^data:(image\/(png|jpeg|jpg|webp|gif|svg\+xml));base64,(.+)$/i.exec(dataUri.trim());
+  if (!match) return { error: "That doesn't look like an image. PNG, JPG, WEBP or SVG please." };
+
+  const raw = Buffer.from(match[3], "base64");
+  if (raw.length > MAX_LOGO_BYTES) {
+    return { error: "That image is over 4MB. Please use a smaller one." };
+  }
+
+  let normalised: string;
+  try {
+    const sharp = (await import("sharp")).default;
+    const png = await sharp(raw)
+      .resize({ width: 400, withoutEnlargement: true, fit: "inside" })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    normalised = `data:image/png;base64,${png.toString("base64")}`;
+  } catch {
+    return { error: "That image couldn't be read. Try a PNG or JPG." };
+  }
+
+  const { error } = await supabase
+    .from("organisations")
+    .update({ logo: normalised })
+    .eq("id", organisationId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/organisations/${organisationId}`);
+  revalidatePath("/organisations");
+  return {};
+}
+
+export async function removeOrganisationLogo(organisationId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("organisations")
+    .update({ logo: null })
+    .eq("id", organisationId);
+  if (error) return { error: error.message };
+  revalidatePath(`/organisations/${organisationId}`);
+  revalidatePath("/organisations");
+  return {};
+}
+
+// --- proposals (Phase 8) -------------------------------------------------
+
+export type ProposalInput = {
+  title: string;
+  organisationId: string;
+  /** Blank when the proposal is not tied to an opportunity. */
+  leadId: string;
+  kind: string;
+  ownerId: string;
+};
+
+/**
+ * Start a proposal. Which starting point it gets depends on the kind: a deck
+ * gets the ADEX spine with the blanks left blank, an email offer gets a
+ * greeting. Nothing is invented on the client's behalf.
+ */
+export async function createProposal(input: ProposalInput) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const title = input.title.trim();
+  if (!title) return { error: "Give the proposal a title." };
+  if (!input.organisationId) return { error: "Choose the company it is for." };
+
+  const { data: org } = await supabase
+    .from("organisations")
+    .select("name")
+    .eq("id", input.organisationId)
+    .maybeSingle();
+  const client = org?.name ?? "";
+
+  const kind = input.kind === "email" ? "email" : "deck";
+  const { starterDeck, starterEmail } = await import("@/lib/proposals");
+  const content = kind === "deck" ? starterDeck(client, title) : starterEmail(client, title);
+
+  const { data, error } = await supabase
+    .from("proposals")
+    .insert({
+      title,
+      organisation_id: input.organisationId,
+      lead_id: input.leadId || null,
+      kind,
+      content,
+      owner_id: input.ownerId || user?.id || null,
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  revalidatePath("/proposals");
+  return { id: data.id as string };
+}
+
+/** Rename, retitle, re-own, or rewrite the content. */
+export async function saveProposal(
+  id: string,
+  patch: { title?: string; ownerId?: string; leadId?: string | null; content?: unknown }
+) {
+  const supabase = await createClient();
+  const update: Record<string, unknown> = {};
+  if (patch.title !== undefined) {
+    const title = patch.title.trim();
+    if (!title) return { error: "The title can't be blank." };
+    update.title = title;
+  }
+  if (patch.ownerId !== undefined) update.owner_id = patch.ownerId || null;
+  if (patch.leadId !== undefined) update.lead_id = patch.leadId || null;
+  if (patch.content !== undefined) update.content = patch.content;
+
+  const { error } = await supabase.from("proposals").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/proposals");
+  revalidatePath(`/proposals/${id}`);
+  return {};
+}
+
+/**
+ * Move a proposal along. Marking it Sent records who and when — that is the
+ * answer to Connor's "so we can see when a proposal has been sent", and it
+ * also writes the organisation's timeline so the proposal shows up beside
+ * the calls and emails rather than only on its own page.
+ */
+export async function setProposalStatus(id: string, status: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { PROPOSAL_STATUSES } = await import("@/lib/proposals");
+  if (!(PROPOSAL_STATUSES as readonly string[]).includes(status)) {
+    return { error: "That isn't a proposal status." };
+  }
+
+  const { data: before } = await supabase
+    .from("proposals")
+    .select("organisation_id, lead_id, title, version, sent_at")
+    .eq("id", id)
+    .maybeSingle();
+
+  const update: Record<string, unknown> = { status };
+  if (status === "Sent" && !before?.sent_at) {
+    update.sent_at = new Date().toISOString();
+    update.sent_by = user?.id ?? null;
+    update.sent_detected_from = "marked by hand";
+  }
+
+  const { error } = await supabase.from("proposals").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  if (before?.organisation_id) {
+    await supabase.from("activities").insert({
+      organisation_id: before.organisation_id,
+      lead_id: before.lead_id,
+      kind: "Note",
+      summary: `Proposal ${status.toLowerCase()}: ${before.title} v${before.version}`,
+      happened_at: new Date().toISOString(),
+      created_by: user?.id ?? null,
+    });
+  }
+
+  revalidatePath("/proposals");
+  revalidatePath(`/proposals/${id}`);
+  if (before?.organisation_id) revalidatePath(`/organisations/${before.organisation_id}`);
+  return {};
+}
+
+/**
+ * Version 2 (and 7). The new one is a copy at the next number; the old one
+ * becomes Superseded, so the history reads as a sequence and only one version
+ * is ever the live offer.
+ */
+export async function newProposalVersion(id: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: source, error: readError } = await supabase
+    .from("proposals")
+    .select("title, organisation_id, lead_id, kind, content, owner_id, version")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!source) return { error: "That proposal no longer exists." };
+
+  // The next number across the whole family, not just this row — two people
+  // branching from v3 should not both land on v4.
+  let next = Number(source.version) + 1;
+  if (source.lead_id) {
+    const { data: family } = await supabase
+      .from("proposals")
+      .select("version")
+      .eq("lead_id", source.lead_id)
+      .order("version", { ascending: false })
+      .limit(1);
+    if (family?.length) next = Number(family[0].version) + 1;
+  }
+
+  const { data, error } = await supabase
+    .from("proposals")
+    .insert({
+      title: source.title,
+      organisation_id: source.organisation_id,
+      lead_id: source.lead_id,
+      kind: source.kind,
+      content: source.content,
+      owner_id: source.owner_id,
+      created_by: user?.id ?? null,
+      version: next,
+      status: "Draft",
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  await supabase.from("proposals").update({ status: "Superseded" }).eq("id", id);
+
+  revalidatePath("/proposals");
+  return { id: data.id as string };
+}
+
+export async function deleteProposal(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("proposals").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/proposals");
+  return {};
+}
+
+/**
+ * Build a proposal's slides from a written brief.
+ *
+ * Connor writes the deck through in a chat and pastes the result; the form
+ * per slide is the part nobody wants to do. The brief is read here rather
+ * than in the browser so the parser stays next to the prompt it has to match.
+ *
+ * `replace` is the honest default for a draft that has never been touched;
+ * appending is for adding a section to a deck already written.
+ */
+export async function buildProposalFromBrief(
+  id: string,
+  brief: string,
+  mode: "replace" | "append" = "replace"
+) {
+  const supabase = await createClient();
+  const { parseBrief } = await import("@/lib/proposal-brief");
+  const { slides, warnings } = parseBrief(brief);
+
+  if (!slides.length) {
+    return {
+      error:
+        warnings[0] ??
+        "Nothing in that brief looked like a slide. Headings start with # or ##.",
+    };
+  }
+
+  const { data: current, error: readError } = await supabase
+    .from("proposals")
+    .select("content, kind")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!current) return { error: "That proposal no longer exists." };
+  if (current.kind !== "deck") {
+    return { error: "This proposal is an email offer — a brief builds slides." };
+  }
+
+  const content = (current.content ?? {}) as { slides?: unknown[] };
+  const existing = Array.isArray(content.slides) ? (content.slides as typeof slides) : [];
+  const next = mode === "append" ? [...existing, ...slides] : slides;
+
+  const { error } = await supabase
+    .from("proposals")
+    .update({ content: { ...content, slides: next } })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/proposals/${id}`);
+  return { built: slides.length, warnings };
+}
+
+/**
+ * Read a document the user dropped in, and hand back its words.
+ *
+ * Nothing is saved here — the text goes into the box so it can be read and
+ * trimmed before it becomes part of the proposal. A client's brief usually
+ * has a signature block and a disclaimer on the end that nobody wants in it.
+ */
+export async function readBriefDocument(dataUri: string, filename: string) {
+  const { extractDocumentText } = await import("@/lib/document-text");
+  return extractDocumentText(dataUri, filename);
+}
+
+/**
+ * Keep the client's brief on the proposal.
+ *
+ * Worth storing in its own right, separate from the slides: it is the record
+ * of what was actually asked for, and the thing to re-read when the client
+ * says the proposal missed the point.
+ */
+export async function saveClientBrief(id: string, clientBrief: string) {
+  const supabase = await createClient();
+  const { data: current, error: readError } = await supabase
+    .from("proposals")
+    .select("content")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!current) return { error: "That proposal no longer exists." };
+
+  const content = (current.content ?? {}) as Record<string, unknown>;
+  const { error } = await supabase
+    .from("proposals")
+    .update({ content: { ...content, clientBrief: clientBrief.trim() || undefined } })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/proposals/${id}`);
+  return {};
+}
+
+// --- importing a year of bookings ----------------------------------------
+
+/**
+ * Load bookings from a spreadsheet.
+ *
+ * Written to be run twice without fear. Anyone loading a year of history will
+ * do it in pieces, find a mistake, fix the file and run it again — so a line
+ * that is already on the books is skipped rather than duplicated, and a
+ * campaign that already exists gains the new lines rather than being created
+ * a second time.
+ *
+ * `dryRun` does everything except write, which is what the preview uses: the
+ * counts it reports are produced by the same code that will do the work, not
+ * by a second implementation that can drift from it.
+ */
+export async function importBookings(
+  csv: string,
+  dryRun: boolean
+): Promise<ImportOutcome> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You need to be signed in.", problems: [] };
+
+  const { parseBookingCsv, groupForImport } = await import("@/lib/import-bookings");
+  const { lines, problems, ignoredColumns } = parseBookingCsv(csv);
+  if (!lines.length) {
+    return {
+      ok: false,
+      error: problems[0]?.problem ?? "Nothing in that file looked like a booking.",
+      problems,
+    };
+  }
+
+  const groups = groupForImport(lines);
+
+  // Everything already on the books, read once rather than per row.
+  const [{ data: clientRows }, { data: campaignRows }] = await Promise.all([
+    supabase.from("clients").select("id, name"),
+    supabase.from("campaigns").select("id, name, client_id"),
+  ]);
+  const clientsByName = new Map<string, string>(
+    (clientRows ?? []).map((c: { id: string; name: string }) => [c.name.toLowerCase(), c.id])
+  );
+  const campaignsByKey = new Map<string, string>(
+    (campaignRows ?? []).map((c: { id: string; name: string; client_id: string }) => [
+      `${c.client_id}\u0000${c.name.toLowerCase()}`,
+      c.id,
+    ])
+  );
+
+  const created = { clients: 0, campaigns: 0, lines: 0 };
+  const skipped: string[] = [];
+  const failures: string[] = [];
+
+  for (const g of groups) {
+    // --- the client ------------------------------------------------------
+    let clientId = clientsByName.get(g.client.toLowerCase());
+    if (!clientId) {
+      created.clients++;
+      if (!dryRun) {
+        const { data, error } = await supabase
+          .from("clients")
+          .insert({ name: g.client, owner_id: user.id })
+          .select("id")
+          .single();
+        if (error || !data) {
+          failures.push(`${g.client}: ${error?.message ?? "could not be created"}`);
+          continue;
+        }
+        const newClientId = data.id as string;
+        clientId = newClientId;
+        clientsByName.set(g.client.toLowerCase(), newClientId);
+      } else {
+        // A placeholder so the campaign below can be counted in the preview.
+        clientId = `new:${g.client.toLowerCase()}`;
+      }
+    }
+
+    // --- the campaign ----------------------------------------------------
+    const campaignKey = `${clientId}\u0000${g.campaign.toLowerCase()}`;
+    let campaignId = campaignsByKey.get(campaignKey);
+    const campaignExisted = Boolean(campaignId);
+    if (!campaignId) {
+      created.campaigns++;
+      if (!dryRun) {
+        const { data, error } = await supabase
+          .from("campaigns")
+          .insert({
+            ref: await nextRef(supabase),
+            name: g.campaign,
+            client_id: clientId,
+            // Historic work, so it is finished unless the dates say otherwise.
+            status: g.end >= new Date().toISOString().slice(0, 10) ? "booked" : "done",
+            owner_id: user.id,
+            start_date: g.start,
+            end_date: g.end,
+            client_po: g.clientPo || null,
+            note: "Imported from spreadsheet",
+          })
+          .select("id")
+          .single();
+        if (error || !data) {
+          failures.push(`${g.campaign}: ${error?.message ?? "could not be created"}`);
+          continue;
+        }
+        const newCampaignId = data.id as string;
+        campaignId = newCampaignId;
+        campaignsByKey.set(campaignKey, newCampaignId);
+      } else {
+        campaignId = `new:${campaignKey}`;
+      }
+    }
+
+    // --- the lines -------------------------------------------------------
+    // Only a campaign that already existed can hold a line we have seen
+    // before, so the comparison is only fetched when it can matter.
+    let existing: { vendor: string; start_date: string; supplier_gross: number }[] = [];
+    if (campaignExisted) {
+      const { data } = await supabase
+        .from("campaign_lines")
+        .select("vendor, start_date, supplier_gross")
+        .eq("campaign_id", campaignId);
+      existing = (data ?? []) as typeof existing;
+    }
+    const seen = new Set(
+      existing.map((e) => `${e.vendor.toLowerCase()}\u0000${e.start_date}\u0000${Number(e.supplier_gross)}`)
+    );
+
+    for (const l of g.lines) {
+      const fingerprint = `${l.supplier.toLowerCase()}\u0000${l.start}\u0000${l.supplierGross}`;
+      if (seen.has(fingerprint)) {
+        skipped.push(`Row ${l.row}: ${l.supplier} on ${l.start} is already on ${g.campaign}.`);
+        continue;
+      }
+      seen.add(fingerprint);
+      created.lines++;
+      if (dryRun) continue;
+
+      const { error } = await supabase.from("campaign_lines").insert({
+        campaign_id: campaignId,
+        channel: l.channel,
+        vendor: l.supplier,
+        publication: l.publication || null,
+        detail: l.detail || null,
+        // An order number from the old system comes across as it is. The
+        // counter notices it and carries on above it, so the CRM never
+        // reissues a number a supplier already has.
+        supplier_po: l.po || null,
+        line_type: l.lineType,
+        start_date: l.start,
+        end_date: l.end,
+        commission_pct: l.commissionPct,
+        supplier_gross: l.supplierGross,
+        client_charge: l.clientCharge,
+      });
+      if (error) failures.push(`Row ${l.row}: ${error.message}`);
+    }
+  }
+
+  if (!dryRun) {
+    revalidatePath("/campaigns");
+    revalidatePath("/clients");
+    revalidatePath("/organisations");
+  }
+
+  return { ok: true, created, problems, skipped, failures, ignoredColumns, groups: groups.length };
+}
+
+// --- read-only API keys for another system -------------------------------
+
+/**
+ * Issue a key for an outside system to read one person's clients.
+ *
+ * The key comes back once and is never stored — only its hash is. That is
+ * deliberate: a lost key is replaced rather than looked up, so this table
+ * leaking is not the same as access leaking.
+ */
+export async function createApiKey(label: string, ownerId: string) {
+  const supabase = await createClient();
+  if (!label.trim()) return { error: "Give the key a name, so you know what it is for." };
+  if (!ownerId) return { error: "Choose whose clients it may read." };
+
+  const { data, error } = await supabase.rpc("api_key_create", {
+    p_label: label.trim(),
+    p_owner: ownerId,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings");
+  return { key: data as string };
+}
+
+export async function revokeApiKey(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("api_key_revoke", { p_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
   return {};
 }

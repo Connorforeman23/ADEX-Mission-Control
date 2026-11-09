@@ -123,6 +123,8 @@ export type OrganisationDetail = {
   orderEmail: string | null;
   /** Invoice this client a month at a time rather than once per campaign. */
   monthlyInvoicing: boolean;
+  /** Data URI of the company logo, for proposal decks. */
+  logo: string | null;
   contacts: OrgContact[];
   /** Space Orders bought from this supplier. */
   orders: OrgOrder[];

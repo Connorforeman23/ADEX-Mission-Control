@@ -16,6 +16,7 @@ import {
 // Row type lives in lib/organisations.ts (no server imports) so client
 // components can use it without pulling this module into the browser bundle.
 import { CUSTOMER_STATUS_LABEL } from "@/lib/organisations";
+import type { ProposalContent, ProposalDetail, ProposalRow } from "@/lib/proposals";
 import type {
   OrganisationRow,
   OrganisationDetail,
@@ -358,7 +359,7 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
   const { data: org, error } = await supabase
     .from("organisations")
     .select(
-      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, owner_id, address_line1, address_line2, city, postcode, country, phone, notes, payment_terms_days, payment_terms_basis, order_email, monthly_invoicing, profiles ( full_name )"
+      "id, name, sector, customer_status, is_supplier, archived, companies_house_no, website, owner_id, address_line1, address_line2, city, postcode, country, phone, notes, payment_terms_days, payment_terms_basis, order_email, monthly_invoicing, logo, profiles ( full_name )"
     )
     .eq("id", id)
     .maybeSingle();
@@ -424,6 +425,7 @@ export async function getOrganisation(id: string): Promise<OrganisationDetail | 
     paymentTermsBasis: (o.payment_terms_basis as string | null) ?? null,
     orderEmail: (o.order_email as string | null) ?? null,
     monthlyInvoicing: Boolean(o.monthly_invoicing),
+    logo: (o.logo as string | null) ?? null,
 
     orders: ((ordersRes.data ?? []) as unknown as {
       id: string;
@@ -1197,4 +1199,163 @@ export async function getFollowUpExceptions(): Promise<FollowUpException[]> {
 
   // Oldest problem first: the longest-overdue task, then the unchased.
   return out.sort((a, b) => (a.since ?? "9999").localeCompare(b.since ?? "9999"));
+}
+
+// --- proposals (Phase 8) -------------------------------------------------
+//
+// The list and the detail. RLS does the deciding about who sees what, so
+// there is no role test here: an admin's select returns everything, a sales
+// user's returns their own.
+
+type ProposalRecord = {
+  id: string;
+  title: string;
+  kind: string;
+  status: string;
+  version: number;
+  organisation_id: string;
+  lead_id: string | null;
+  owner_id: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+  content: unknown;
+  organisations: { name: string } | null;
+  leads: { name: string } | null;
+  owner: { full_name: string } | null;
+  sender: { full_name: string } | null;
+};
+
+const PROPOSAL_SELECT =
+  "id, title, kind, status, version, organisation_id, lead_id, owner_id, sent_at, created_at, updated_at, content, " +
+  "organisations ( name ), leads ( name ), " +
+  "owner:profiles!proposals_owner_id_fkey ( full_name ), " +
+  "sender:profiles!proposals_sent_by_fkey ( full_name )";
+
+function proposalRow(r: ProposalRecord): ProposalRow {
+  const content = (r.content ?? {}) as ProposalContent;
+  return {
+    id: r.id,
+    title: r.title,
+    kind: r.kind,
+    status: r.status,
+    version: r.version,
+    organisationId: r.organisation_id,
+    organisation: r.organisations?.name ?? "—",
+    leadId: r.lead_id,
+    lead: r.leads?.name ?? null,
+    owner: r.owner?.full_name ?? "—",
+    ownerId: r.owner_id,
+    sentAt: r.sent_at,
+    sentBy: r.sender?.full_name ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    slideCount: Array.isArray(content.slides) ? content.slides.length : 0,
+  };
+}
+
+/**
+ * The proposal list, and whether reading it worked.
+ *
+ * The error is returned rather than swallowed: an empty list and a failed
+ * read look identical to a reader, and telling someone there are no
+ * proposals when in truth we could not look is worse than saying nothing.
+ * It caught a missing migration the first time the page was opened.
+ */
+export async function getProposals(): Promise<{ rows: ProposalRow[]; error: string | null }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("proposals")
+    .select(PROPOSAL_SELECT)
+    .order("updated_at", { ascending: false });
+  return {
+    rows: ((data ?? []) as unknown as ProposalRecord[]).map(proposalRow),
+    error: error?.message ?? null,
+  };
+}
+
+export async function getProposal(id: string): Promise<ProposalDetail | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("proposals")
+    .select(PROPOSAL_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const record = data as unknown as ProposalRecord;
+  const base = proposalRow(record);
+
+  // The other versions for the same opportunity, so a reader can see where
+  // this one sits in the sequence rather than guessing from the number.
+  let siblings: ProposalDetail["siblings"] = [];
+  if (record.lead_id) {
+    const { data: rest } = await supabase
+      .from("proposals")
+      .select("id, version, status, title")
+      .eq("lead_id", record.lead_id)
+      .order("version", { ascending: false });
+    siblings = (rest ?? []) as ProposalDetail["siblings"];
+  }
+
+  return { ...base, content: (record.content ?? {}) as ProposalContent, siblings };
+}
+
+/**
+ * The logos a deck can draw on: every organisation that has one, keyed by
+ * lower-case name. The deck generator looks suppliers up by name, so the
+ * author never has to source an image by hand.
+ */
+export async function getSupplierLogos(): Promise<Record<string, string>> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("organisations")
+    .select("name, logo")
+    .not("logo", "is", null);
+  const out: Record<string, string> = {};
+  for (const o of (data ?? []) as { name: string; logo: string }[]) {
+    out[o.name.toLowerCase()] = o.logo;
+  }
+  return out;
+}
+
+/**
+ * Just the names of the organisations that have a logo saved.
+ *
+ * The editor only needs to offer the names for autocomplete; pulling the
+ * images as well would send every logo's bytes to the browser on every page
+ * view, for nothing. getSupplierLogos is for the deck builder, which does
+ * need them.
+ */
+export async function getLogoOwnerNames(): Promise<string[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("organisations")
+    .select("name")
+    .not("logo", "is", null)
+    .order("name");
+  return ((data ?? []) as { name: string }[]).map((o) => o.name);
+}
+
+/** Keys issued to outside systems. Admin only — RLS sees to that. */
+export async function getApiKeys() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("api_keys")
+    .select("id, label, created_at, last_used_at, revoked_at, profiles!api_keys_owner_id_fkey ( full_name )")
+    .order("created_at", { ascending: false });
+  return ((data ?? []) as unknown as {
+    id: string;
+    label: string;
+    created_at: string;
+    last_used_at: string | null;
+    revoked_at: string | null;
+    profiles: { full_name: string } | null;
+  }[]).map((k) => ({
+    id: k.id,
+    label: k.label,
+    owner: k.profiles?.full_name ?? "—",
+    createdAt: k.created_at,
+    lastUsedAt: k.last_used_at,
+    revokedAt: k.revoked_at,
+  }));
 }

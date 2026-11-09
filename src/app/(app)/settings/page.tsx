@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { requireFullAccess, getMyProfile } from "@/lib/queries";
+import { requireFullAccess, getMyProfile, getApiKeys } from "@/lib/queries";
 import { COMMISSION_RATE, MARGIN_FLOOR, VAT_RATE, initials } from "@/lib/money";
 import { INVOICE_TOLERANCE } from "@/lib/po";
 import { SUPPLIERS_BY_CHANNEL } from "@/lib/reference";
@@ -9,6 +10,7 @@ import ActivityLog from "@/components/ActivityLog";
 import XeroPanel from "@/components/XeroPanel";
 import MicrosoftPanel from "@/components/MicrosoftPanel";
 import CollapsibleCard from "@/components/CollapsibleCard";
+import ApiKeys from "@/components/ApiKeys";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,9 @@ export default async function SettingsPage() {
     .order("full_name");
 
   const members = team ?? [];
+  // Only an admin can see keys at all, and RLS agrees — but there is no
+  // point asking for them when the page will not show them.
+  const apiKeys = isAdmin ? await getApiKeys() : [];
 
   return (
     <div className="page">
@@ -109,6 +114,27 @@ export default async function SettingsPage() {
           <XeroPanel />
         </Suspense>
       )}
+
+      {/* Bulk history. Admin only, because a mistake here is a mistake
+          across a year of bookings rather than one. */}
+      {isAdmin && (
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-body" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div className="grow" style={{ minWidth: 220 }}>
+              <p style={{ margin: 0, fontWeight: 560 }}>Import bookings</p>
+              <small className="sub-line">
+                Load a year of history from a spreadsheet. Nothing is written until you have
+                seen what it will do.
+              </small>
+            </div>
+            <Link className="btn" href="/import">
+              Open
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {isAdmin && <ApiKeys keys={apiKeys} staff={members} />}
 
       {isAdmin && <ActivityLog />}
 

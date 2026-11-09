@@ -18,6 +18,31 @@ import { syncTaskToCalendar } from "@/lib/ms-actions";
 import type { TaskRow } from "@/lib/queries";
 
 const TASK_TYPES = ["Chase", "Prep", "Admin", "Meeting"] as const;
+
+/**
+ * The filter choices, kept per person in this browser.
+ *
+ * Keyed by user id because a shared machine should not show one person's
+ * view to the next. Every access is wrapped: private windows and blocked
+ * site data make localStorage throw rather than return nothing, and a
+ * remembered filter is not worth a blank page.
+ */
+function remembered<T extends string>(userId: string, key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    return (localStorage.getItem(`adex-tasks:${userId}:${key}`) as T) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function remember(userId: string, key: string, value: string) {
+  try {
+    localStorage.setItem(`adex-tasks:${userId}:${key}`, value);
+  } catch {
+    // Not worth telling anyone about — the filter simply won't be remembered.
+  }
+}
 const OUTCOME_KINDS = ["Call", "WhatsApp", "Text", "Meeting", "Note"] as const;
 
 /** How soon the next one — the usual answers, plus a date of your own. */
@@ -68,9 +93,34 @@ export default function TasksPanel({
   openNew?: boolean;
 }) {
   const router = useRouter();
-  const [who, setWho] = useState("All");
-  const [show, setShow] = useState<"open" | "due" | "done" | "parked">("open");
-  const [type, setType] = useState("All");
+
+  // Connor: "the task list it defaults to everyone and open - can you change
+  // the default so it's 'me' and due? I keep going back to the page and the
+  // filters have reset."
+  //
+  // So two things. The default is your own work that is actually due, which
+  // is what anyone opening this page wants to see. And a change you make
+  // sticks — remembered per person, so two people sharing a machine do not
+  // inherit each other's view.
+  const myName = staff.find((s) => s.id === meId)?.full_name ?? "All";
+  const [who, setWho] = useState<string>(() => remembered(meId, "who", myName));
+  const [show, setShow] = useState<"open" | "due" | "done" | "parked">(() =>
+    remembered(meId, "show", "due")
+  );
+  const [type, setType] = useState<string>(() => remembered(meId, "type", "All"));
+
+  function chooseWho(value: string) {
+    setWho(value);
+    remember(meId, "who", value);
+  }
+  function chooseShow(value: "open" | "due" | "done" | "parked") {
+    setShow(value);
+    remember(meId, "show", value);
+  }
+  function chooseType(value: string) {
+    setType(value);
+    remember(meId, "type", value);
+  }
   const defaultAssignee = staff.some((s) => s.id === meId) ? meId : staff[0]?.id ?? "";
   const prefillOrgId = organisations.find((o) => o.name === prefillOrg)?.id;
   const [editing, setEditing] = useState<TaskInput | null>(
@@ -186,7 +236,7 @@ export default function TasksPanel({
       <div className="filters">
         <label className="field">
           <span>Assignee</span>
-          <select className="input" value={who} onChange={(e) => setWho(e.target.value)}>
+          <select className="input" value={who} onChange={(e) => chooseWho(e.target.value)}>
             <option value="All">Everyone</option>
             {staff.map((s) => (
               <option key={s.id}>{s.full_name}</option>
@@ -195,7 +245,7 @@ export default function TasksPanel({
         </label>
         <label className="field">
           <span>Type</span>
-          <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
+          <select className="input" value={type} onChange={(e) => chooseType(e.target.value)}>
             <option value="All">All types</option>
             {TASK_TYPES.map((k) => (
               <option key={k}>{k}</option>
@@ -205,7 +255,7 @@ export default function TasksPanel({
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           <Segmented
             value={show}
-            onChange={setShow}
+            onChange={chooseShow}
             options={[
               { value: "open", label: "Open" },
               { value: "due", label: dueCount ? `Due (${dueCount})` : "Due" },
@@ -232,7 +282,12 @@ export default function TasksPanel({
               {show === "open"
                 ? "Nothing outstanding. Tasks raised from campaigns, pipeline and clients land here."
                 : show === "due"
-                  ? "Nothing due today and nothing overdue."
+                  ? who === "All"
+                    ? "Nothing due today and nothing overdue."
+                    : // The list now opens on your own work, so an empty one
+                      // should say whose it is rather than imply the team has
+                      // nothing on.
+                      `Nothing of ${who === myName ? "yours" : `${who}'s`} is due today or overdue. Switch the assignee to Everyone to see the team's.`
                   : "Nothing completed yet."}
             </p>
           ) : (
