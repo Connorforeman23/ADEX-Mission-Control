@@ -32,8 +32,15 @@ if (!parsedDir || !outDir) {
 }
 // Only orders with something booked on or after this date are considered.
 const periodFrom = opt.from ?? "2025-11-01";
-// Who owns what (Connor, 10 Nov 2026): Randox is Connor's, every other client
+// Who owns what (Connor, 10 Nov 2026): Randox is Connor's; Faster Property
+// Solutions and Home Start are Kate's; Spa Breaks is Jon's; every other client
 // is Steve's. Whoever raised the order is only the person on the deal.
+const OWNER_BY_CLIENT = {
+  "randox health": "Connor Foreman",
+  "faster property solutions": "Kate Johnston",
+  "home start": "Kate Johnston",
+  "spa breaks": "Jon Murphy",
+};
 const OWNER_BY_CODE = { RAN: "Connor Foreman" };
 const DEFAULT_OWNER = "Steve Foreman";
 const campaignRule = opt.campaign ?? "month";
@@ -166,7 +173,7 @@ for (const o of orders) {
       supplier_gross: gross, client_charge: clientCharge,
       commission_pct: commission ?? "", po: o.po_number, line_type: production ? "production" : "media",
       detail: tidy(detail), client_po: "",
-      owner: OWNER_BY_CODE[o.client_code] ?? DEFAULT_OWNER, handled_by: tidy(o.from_staff),
+      owner: OWNER_BY_CLIENT[client.toLowerCase()] ?? OWNER_BY_CODE[o.client_code] ?? DEFAULT_OWNER, handled_by: tidy(o.from_staff),
     });
   }
   if (lineProblem) { hold(o, lineProblem); continue; }
