@@ -76,7 +76,8 @@ export default function BookingImport() {
             Dates are read day first &mdash; <code>01/03/2026</code> is the 1st of March. Rows for
             the same client and campaign name become one campaign, and its dates are the span of
             its lines. Put the old order number in <code>po</code> and the CRM will carry on above
-            it rather than reissuing a number a supplier already has.
+            it rather than reissuing a number a supplier already has. A line whose PO is already on
+            the books is skipped, so bookings already entered here are not doubled.
           </p>
           <p className="sub-line">
             <code>owner</code> is the member of staff who owns the client and the campaign, and{" "}
@@ -215,7 +216,7 @@ export default function BookingImport() {
         <Issues
           title={`${result.skipped.length} already on the books`}
           tone="var(--warn)"
-          note="Matched on supplier, start date and cost — safe to run the same file twice."
+          note="Matched on PO number, or on supplier, start date and cost — safe to run the same file twice, and bookings already entered by hand are not duplicated."
           items={result.skipped}
         />
       )}

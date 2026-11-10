@@ -2043,11 +2043,35 @@ export async function importBookings(
   const groups = groupForImport(lines);
 
   // Everything already on the books, read once rather than per row.
-  const [{ data: clientRows }, { data: campaignRows }, { data: staffRows }] = await Promise.all([
-    supabase.from("clients").select("id, name, owner_id"),
-    supabase.from("campaigns").select("id, name, client_id"),
-    supabase.from("profiles").select("id, full_name"),
-  ]);
+  const [{ data: clientRows }, { data: campaignRows }, { data: staffRows }, { data: poLineRows }, { data: poOrderRows }] =
+    await Promise.all([
+      supabase.from("clients").select("id, name, owner_id"),
+      supabase.from("campaigns").select("id, name, client_id"),
+      supabase.from("profiles").select("id, full_name"),
+      supabase.from("campaign_lines").select("supplier_po, campaign_id"),
+      supabase.from("space_orders").select("order_number, campaign_id"),
+    ]);
+  const campaignName = new Map(
+    (campaignRows ?? []).map((c: { id: string; name: string }) => [c.id, c.name])
+  );
+  // Every PO number already on the books, and the campaign it is on. Bookings
+  // entered by hand carry their PO, usually under a different campaign name
+  // from the one an import would choose, so the PO is what tells us an order
+  // is already there. Compared ignoring case, spaces and leading zeros, so
+  // RAN0102 and RAN00102 are the same order.
+  const poKey = (po: string) => {
+    const s = po.toUpperCase().replace(/\s+/g, "");
+    const m = s.match(/^([A-Z0-9]*?[A-Z])0*(\d+)([A-Z]*)$/);
+    return m ? `${m[1]}${Number(m[2])}${m[3]}` : s;
+  };
+  const posOnBooks = new Map<string, string>();
+  for (const r of [
+    ...((poLineRows ?? []) as { supplier_po: string | null; campaign_id: string }[]).map((r) => [r.supplier_po, r.campaign_id] as const),
+    ...((poOrderRows ?? []) as { order_number: string | null; campaign_id: string }[]).map((r) => [r.order_number, r.campaign_id] as const),
+  ]) {
+    const [po, campaignId] = r;
+    if (po && po.trim()) posOnBooks.set(poKey(po), campaignName.get(campaignId) ?? "another campaign");
+  }
   const staff = (staffRows ?? []) as { id: string; full_name: string }[];
   const staffName = new Map(staff.map((s) => [s.id, s.full_name]));
   const clientsByName = new Map<string, { id: string; owner_id: string | null }>(
@@ -2070,6 +2094,18 @@ export async function importBookings(
   const unknownHandlers = new Set<string>();
 
   for (const g of groups) {
+    // --- already booked under its PO? -----------------------------------
+    // A line whose PO is already on the books is skipped. If that leaves the
+    // campaign empty, nothing at all is created for it — no client, no
+    // organisation, no empty campaign.
+    g.lines = g.lines.filter((l) => {
+      const where = l.po ? posOnBooks.get(poKey(l.po)) : undefined;
+      if (where === undefined) return true;
+      skipped.push(`Row ${l.row}: PO ${l.po} is already on the books, in "${where}".`);
+      return false;
+    });
+    if (!g.lines.length) continue;
+
     const firstRow = g.lines[0]?.row ?? 0;
 
     // --- who owns it ----------------------------------------------------
