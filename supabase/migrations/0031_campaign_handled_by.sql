@@ -1,19 +1,30 @@
 -- ADEX Mission Control — 0031: the person on a deal, apart from its owner
 --
--- Connor, 10 Nov 2026: every client except Randox is Steve's, Randox is
--- Connor's, and the owner is only ever one of the two of them. Whoever
--- actually raised or ran the booking — Jon, Kate, Lynsey — is "associated
--- with the deal", not its owner.
+-- Connor, 10 Nov 2026: Randox is Connor's, Faster Property Solutions and Home
+-- Start are Kate's, Spa Breaks is Jon's and everything else is Steve's.
+-- Whoever actually raised or ran the booking is "associated with the deal",
+-- not its owner.
 --
 -- campaigns.owner_id already means the owner. This adds the second person:
--- who handled it. Optional, and a profile, so it follows the person if their
--- name changes and goes blank (rather than blocking) if they are removed.
+-- who handled it, as a profile id. Optional.
+--
+-- DELIBERATELY NOT A FOREIGN KEY. The first version of this file made it one
+-- (references profiles). That gave campaigns two links to profiles, and every
+-- query that asks for a campaign's profiles ( full_name ) — the Campaigns page,
+-- the dashboard, reports, Space Orders — failed with "more than one
+-- relationship", so those pages showed nothing. It went to production on
+-- 10 Nov 2026 and was undone the same day. The importer only ever stores the
+-- id of a staff member it has just looked up, so nothing is lost by not
+-- enforcing it here.
 --
 -- No policy change: campaigns are already guarded by owner and client
 -- (0002), and being the handler grants nothing extra.
--- Safe to re-run.
+-- Safe to re-run, and undoes the foreign key on any database that ran the
+-- first version.
 
-alter table campaigns add column if not exists handled_by uuid references profiles (id) on delete set null;
+alter table campaigns add column if not exists handled_by uuid;
+
+alter table campaigns drop constraint if exists campaigns_handled_by_fkey;
 
 create index if not exists campaigns_handled_by_idx on campaigns (handled_by);
 
