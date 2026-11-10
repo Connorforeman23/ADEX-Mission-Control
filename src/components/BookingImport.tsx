@@ -78,6 +78,12 @@ export default function BookingImport() {
             its lines. Put the old order number in <code>po</code> and the CRM will carry on above
             it rather than reissuing a number a supplier already has.
           </p>
+          <p className="sub-line">
+            <code>owner</code> is the member of staff who owns the client and the campaign, and{" "}
+            <code>handled_by</code> is who ran the booking. Use their names as they appear on their
+            profile. Left blank, you become the owner. An owner who isn&rsquo;t on the system stops
+            that campaign going in; a client already on the books keeps the owner it has.
+          </p>
 
           <textarea
             className="input"
@@ -193,6 +199,15 @@ export default function BookingImport() {
           tone="var(--crit)"
           note="Everything else went in."
           items={result.failures}
+        />
+      )}
+
+      {result?.ok && result.warnings.length > 0 && (
+        <Issues
+          title={`${result.warnings.length} worth a look`}
+          tone="var(--warn)"
+          note="These still import, but not quite as the file says."
+          items={result.warnings}
         />
       )}
 

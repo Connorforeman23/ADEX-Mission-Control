@@ -2030,7 +2030,7 @@ export async function importBookings(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "You need to be signed in.", problems: [] };
 
-  const { parseBookingCsv, groupForImport } = await import("@/lib/import-bookings");
+  const { parseBookingCsv, groupForImport, findStaff } = await import("@/lib/import-bookings");
   const { lines, problems, ignoredColumns } = parseBookingCsv(csv);
   if (!lines.length) {
     return {
@@ -2043,12 +2043,18 @@ export async function importBookings(
   const groups = groupForImport(lines);
 
   // Everything already on the books, read once rather than per row.
-  const [{ data: clientRows }, { data: campaignRows }] = await Promise.all([
-    supabase.from("clients").select("id, name"),
+  const [{ data: clientRows }, { data: campaignRows }, { data: staffRows }] = await Promise.all([
+    supabase.from("clients").select("id, name, owner_id"),
     supabase.from("campaigns").select("id, name, client_id"),
+    supabase.from("profiles").select("id, full_name"),
   ]);
-  const clientsByName = new Map<string, string>(
-    (clientRows ?? []).map((c: { id: string; name: string }) => [c.name.toLowerCase(), c.id])
+  const staff = (staffRows ?? []) as { id: string; full_name: string }[];
+  const staffName = new Map(staff.map((s) => [s.id, s.full_name]));
+  const clientsByName = new Map<string, { id: string; owner_id: string | null }>(
+    (clientRows ?? []).map((c: { id: string; name: string; owner_id: string | null }) => [
+      c.name.toLowerCase(),
+      { id: c.id, owner_id: c.owner_id },
+    ])
   );
   const campaignsByKey = new Map<string, string>(
     (campaignRows ?? []).map((c: { id: string; name: string; client_id: string }) => [
@@ -2060,28 +2066,93 @@ export async function importBookings(
   const created = { clients: 0, campaigns: 0, lines: 0 };
   const skipped: string[] = [];
   const failures: string[] = [];
+  const warnings: string[] = [];
+  const unknownHandlers = new Set<string>();
 
   for (const g of groups) {
+    const firstRow = g.lines[0]?.row ?? 0;
+
+    // --- who owns it ----------------------------------------------------
+    // An owner named in the file must be a member of staff. If it is not,
+    // the campaign is left out rather than quietly given to whoever is
+    // running the import: ownership decides who sees a client.
+    if (g.owners.length > 1) {
+      problems.push({
+        row: firstRow,
+        problem: `${g.campaign}: its rows name different owners (${g.owners.join(", ")}). Left out.`,
+      });
+      continue;
+    }
+    let ownerId: string = user.id;
+    if (g.owner) {
+      const match = findStaff(g.owner, staff);
+      if (!match) {
+        problems.push({
+          row: firstRow,
+          problem: `${g.campaign}: owner "${g.owner}" is not a member of staff here. Left out.`,
+        });
+        continue;
+      }
+      ownerId = match.id;
+    }
+    // Who handled it is a nice-to-have: a name we cannot place is noted and
+    // the booking still goes in.
+    let handlerId: string | null = null;
+    if (g.handledBy) {
+      const match = findStaff(g.handledBy, staff);
+      if (match) handlerId = match.id;
+      else unknownHandlers.add(g.handledBy);
+    }
+
     // --- the client ------------------------------------------------------
-    let clientId = clientsByName.get(g.client.toLowerCase());
-    if (!clientId) {
+    let client = clientsByName.get(g.client.toLowerCase());
+    if (!client) {
       created.clients++;
       if (!dryRun) {
         const { data, error } = await supabase
           .from("clients")
-          .insert({ name: g.client, owner_id: user.id })
+          .insert({ name: g.client, owner_id: ownerId })
           .select("id")
           .single();
         if (error || !data) {
           failures.push(`${g.client}: ${error?.message ?? "could not be created"}`);
           continue;
         }
-        const newClientId = data.id as string;
-        clientId = newClientId;
-        clientsByName.set(g.client.toLowerCase(), newClientId);
+        client = { id: data.id as string, owner_id: ownerId };
       } else {
-        // A placeholder so the campaign below can be counted in the preview.
-        clientId = `new:${g.client.toLowerCase()}`;
+        // A placeholder so the campaign below can be counted in the preview,
+        // and so a client with several campaigns is counted once, not once
+        // per campaign.
+        client = { id: `new:${g.client.toLowerCase()}`, owner_id: ownerId };
+      }
+      clientsByName.set(g.client.toLowerCase(), client);
+    } else if (g.owner && client.owner_id !== ownerId) {
+      // An existing client keeps its owner. Changing it is a decision, not
+      // something an import should do on the side.
+      const current = client.owner_id ? (staffName.get(client.owner_id) ?? "someone else") : "nobody";
+      const note = `${g.client} is owned by ${current} on the books; the file says ${g.owner}. Left as it is.`;
+      if (!warnings.includes(note)) warnings.push(note);
+    }
+    const clientId = client.id;
+
+    // --- the organisation --------------------------------------------------
+    // The organisation is the master record. Every other way of creating a
+    // campaign links it and marks the client active, so an import does too.
+    // Not in the preview: these calls write.
+    let clientOrgId: string | null = null;
+    if (!dryRun) {
+      const { data: orgId } = await supabase.rpc("find_or_create_organisation", {
+        p_name: g.client,
+        p_sector: null,
+        p_owner: ownerId,
+      });
+      clientOrgId = (orgId as string | null) ?? null;
+      if (clientOrgId) {
+        await supabase.rpc("set_organisation_status", {
+          p_org: clientOrgId,
+          p_status: "active_client",
+          p_reason: `Bookings imported: ${g.campaign}`,
+        });
       }
     }
 
@@ -2098,9 +2169,13 @@ export async function importBookings(
             ref: await nextRef(supabase),
             name: g.campaign,
             client_id: clientId,
+            client_org_id: clientOrgId,
             // Historic work, so it is finished unless the dates say otherwise.
             status: g.end >= new Date().toISOString().slice(0, 10) ? "booked" : "done",
-            owner_id: user.id,
+            owner_id: ownerId,
+            // Only sent when known, so a file without the column still loads
+            // on a database that has not had 0031 yet.
+            ...(handlerId ? { handled_by: handlerId } : {}),
             start_date: g.start,
             end_date: g.end,
             client_po: g.clientPo || null,
@@ -2121,27 +2196,31 @@ export async function importBookings(
     }
 
     // --- the lines -------------------------------------------------------
-    // Only a campaign that already existed can hold a line we have seen
-    // before, so the comparison is only fetched when it can matter.
-    let existing: { vendor: string; start_date: string; supplier_gross: number }[] = [];
+    // A line already on the books is skipped, so the same file can be run
+    // twice. Lines are counted rather than just recognised: two separate
+    // insertions on the same day at the same price both go in the first
+    // time, and both are recognised the second. Only a campaign that already
+    // existed can hold such a line, so the comparison is fetched only then.
+    const onBooks = new Map<string, number>();
     if (campaignExisted) {
       const { data } = await supabase
         .from("campaign_lines")
         .select("vendor, start_date, supplier_gross")
         .eq("campaign_id", campaignId);
-      existing = (data ?? []) as typeof existing;
+      for (const e of (data ?? []) as { vendor: string; start_date: string; supplier_gross: number }[]) {
+        const k = `${e.vendor.toLowerCase()}\u0000${e.start_date}\u0000${Number(e.supplier_gross)}`;
+        onBooks.set(k, (onBooks.get(k) ?? 0) + 1);
+      }
     }
-    const seen = new Set(
-      existing.map((e) => `${e.vendor.toLowerCase()}\u0000${e.start_date}\u0000${Number(e.supplier_gross)}`)
-    );
 
     for (const l of g.lines) {
       const fingerprint = `${l.supplier.toLowerCase()}\u0000${l.start}\u0000${l.supplierGross}`;
-      if (seen.has(fingerprint)) {
+      const left = onBooks.get(fingerprint) ?? 0;
+      if (left > 0) {
+        onBooks.set(fingerprint, left - 1);
         skipped.push(`Row ${l.row}: ${l.supplier} on ${l.start} is already on ${g.campaign}.`);
         continue;
       }
-      seen.add(fingerprint);
       created.lines++;
       if (dryRun) continue;
 
@@ -2166,13 +2245,19 @@ export async function importBookings(
     }
   }
 
+  if (unknownHandlers.size) {
+    warnings.push(
+      `Not a member of staff here, so left blank as the person on the deal: ${[...unknownHandlers].sort().join(", ")}.`
+    );
+  }
+
   if (!dryRun) {
     revalidatePath("/campaigns");
     revalidatePath("/clients");
     revalidatePath("/organisations");
   }
 
-  return { ok: true, created, problems, skipped, failures, ignoredColumns, groups: groups.length };
+  return { ok: true, created, problems, skipped, failures, warnings, ignoredColumns, groups: groups.length };
 }
 
 // --- read-only API keys for another system -------------------------------
