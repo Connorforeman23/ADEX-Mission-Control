@@ -30,6 +30,10 @@ export const IMPORT_COLUMNS = [
   "line_type",
   "detail",
   "client_po",
+  // Who owns the client and campaign, and who handled the booking. Names of
+  // members of staff, as they appear on their profile.
+  "owner",
+  "handled_by",
 ] as const;
 
 export const REQUIRED_COLUMNS = [
@@ -62,6 +66,10 @@ export type ImportLine = {
   lineType: "media" | "production";
   detail: string;
   clientPo: string;
+  /** A staff member's name, or "" to make whoever runs the import the owner. */
+  owner: string;
+  /** The staff member who handled the booking, or "". */
+  handledBy: string;
 };
 
 export type RowProblem = { row: number; problem: string };
@@ -265,6 +273,8 @@ export function parseBookingCsv(text: string): ParsedImport {
       lineType,
       detail: cell(r, "detail"),
       clientPo: cell(r, "client_po"),
+      owner: cell(r, "owner"),
+      handledBy: cell(r, "handled_by"),
     });
   });
 
@@ -278,6 +288,12 @@ export type ImportGroup = {
   start: string;
   end: string;
   clientPo: string;
+  /** The owner named on the campaign's rows ("" if none). */
+  owner: string;
+  /** Every different owner named on its rows — more than one is a mistake. */
+  owners: string[];
+  /** Who handled it: the first name given on its rows ("" if none). */
+  handledBy: string;
   lines: ImportLine[];
   billings: number;
   cost: number;
@@ -300,6 +316,9 @@ export function groupForImport(lines: ImportLine[]): ImportGroup[] {
         start: l.start,
         end: l.end,
         clientPo: l.clientPo,
+        owner: "",
+        owners: [],
+        handledBy: "",
         lines: [],
         billings: 0,
         cost: 0,
@@ -310,18 +329,51 @@ export function groupForImport(lines: ImportLine[]): ImportGroup[] {
     if (l.start < g.start) g.start = l.start;
     if (l.end > g.end) g.end = l.end;
     if (!g.clientPo && l.clientPo) g.clientPo = l.clientPo;
+    if (l.owner && !g.owners.some((o) => o.toLowerCase() === l.owner.toLowerCase())) g.owners.push(l.owner);
+    if (!g.owner && l.owner) g.owner = l.owner;
+    if (!g.handledBy && l.handledBy) g.handledBy = l.handledBy;
     g.billings += l.clientCharge;
     g.cost += l.supplierGross * (1 - l.commissionPct / 100);
   }
   return [...groups.values()];
 }
 
+/**
+ * Find a member of staff by the name written on a spreadsheet.
+ *
+ * In order: the full name exactly (ignoring case and spacing); then the same
+ * surname where one first name begins the other ("Jon" / "Jonathan"). A name
+ * that fits nobody, or fits more than one person, is not resolved: an owner
+ * is never guessed.
+ */
+export function findStaff(
+  name: string,
+  staff: { id: string; full_name: string }[]
+): { id: string; full_name: string } | null {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z\s'-]/g, " ").replace(/\s+/g, " ").trim();
+  const wanted = norm(name);
+  if (!wanted) return null;
+
+  const exact = staff.filter((s) => norm(s.full_name) === wanted);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+
+  const [first, ...rest] = wanted.split(" ");
+  const last = rest.join(" ");
+  if (!last) return null;
+  const close = staff.filter((s) => {
+    const [f, ...r] = norm(s.full_name).split(" ");
+    return r.join(" ") === last && (f.startsWith(first) || first.startsWith(f));
+  });
+  return close.length === 1 ? close[0] : null;
+}
+
 /** The headings, as a file somebody can open in Excel and fill in. */
 export const TEMPLATE_CSV = [
   IMPORT_COLUMNS.join(","),
-  'Randox Health,Spring Health Check,Radio,Free Radio,Free Radio Birmingham,01/03/2026,28/03/2026,9250,11500,15,RAN0094,media,4 week burst,PO-4471',
-  'Randox Health,Spring Health Check,OOH,JCDecaux,12 x 48 Sheet,01/03/2026,14/03/2026,18400,22000,15,RAN0095,media,,PO-4471',
-  'Randox Health,Spring Health Check,Creative,Studio,,01/02/2026,14/02/2026,850,1200,0,,production,Artwork and amends,PO-4471',
+  'Randox Health,Spring Health Check,Radio,Free Radio,Free Radio Birmingham,01/03/2026,28/03/2026,9250,11500,15,RAN0094,media,4 week burst,PO-4471,Connor Foreman,Connor Foreman',
+  'Randox Health,Spring Health Check,OOH,JCDecaux,12 x 48 Sheet,01/03/2026,14/03/2026,18400,22000,15,RAN0095,media,,PO-4471,Connor Foreman,Connor Foreman',
+  'Randox Health,Spring Health Check,Creative,Studio,,01/02/2026,14/02/2026,850,1200,0,,production,Artwork and amends,PO-4471,Connor Foreman,Connor Foreman',
 ].join("\n");
 
 /**
@@ -341,6 +393,8 @@ export type ImportOutcome =
       skipped: string[];
       /** Rows the database itself refused. */
       failures: string[];
+      /** Things that went in, but not quite as the file said — worth a look. */
+      warnings: string[];
       ignoredColumns: string[];
       /** How many campaigns the rows grouped into. */
       groups: number;
