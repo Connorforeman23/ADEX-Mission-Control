@@ -9,11 +9,13 @@ import {
   CHANNEL_COLOUR,
   channelLabel,
   clientGross,
-  dealMargin,
   dealProfit,
   gbp,
   gbpK,
   MARGIN_FLOOR,
+  belowFloor,
+  floorMargin,
+  floorTotals,
   STATUS_LABEL,
   supplierNet,
 } from "@/lib/money";
@@ -136,7 +138,16 @@ export default async function DashboardPage({
       colour: OWNER_COLOURS[i % OWNER_COLOURS.length],
     }));
 
-  const lowMargin = openBook.filter((c) => clientGross(c) > 0 && dealMargin(c) < MARGIN_FLOOR);
+  const lowMargin = openBook.filter(belowFloor);
+  // The KPI colour is judged like the warnings: pass-through production left out.
+  const bookFloor = campaigns.reduce(
+    (a, c) => {
+      const t = floorTotals(c);
+      return { charge: a.charge + t.charge, net: a.net + t.net };
+    },
+    { charge: 0, net: 0 }
+  );
+  const bookFloorMargin = bookFloor.charge ? ((bookFloor.charge - bookFloor.net) / bookFloor.charge) * 100 : 0;
 
   return (
     <div className="page">
@@ -169,7 +180,7 @@ export default async function DashboardPage({
           label="Profit"
           value={gbpK(totalProfit)}
           foot={totalGross ? `${bookMargin.toFixed(1)}% margin` : "Commission + markup + fees"}
-          tone={totalGross && bookMargin < MARGIN_FLOOR ? "crit" : "ok"}
+          tone={bookFloor.charge && bookFloorMargin < MARGIN_FLOOR ? "crit" : "ok"}
         />
         <Kpi
           label="Open pipeline"
@@ -324,7 +335,7 @@ export default async function DashboardPage({
                     <span className="flag warn">%</span>
                     <div className="grow">
                       <p>
-                        {c.ref} margin {dealMargin(c).toFixed(1)}% — below the {MARGIN_FLOOR}% floor
+                        {c.ref} margin {floorMargin(c).toFixed(1)}% — below the {MARGIN_FLOOR}% floor
                       </p>
                       <small>
                         {c.name} · {c.profiles?.full_name ?? "Unassigned"}

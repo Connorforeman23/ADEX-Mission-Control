@@ -14,6 +14,8 @@ import {
   gbpK,
   markupOf,
   MARGIN_FLOOR,
+  belowFloor,
+  floorMargin,
   rangeGB,
   STATUS_LABEL,
   supplierGross,
@@ -261,7 +263,7 @@ export default function CampaignTable({
                 <tbody>
                   {rows.map((c) => {
                     const margin = dealMargin(c);
-                    const low = clientGross(c) > 0 && margin < MARGIN_FLOOR;
+                    const low = belowFloor(c);
                     return (
                       <tr key={c.id} onClick={() => setDetail(c)} style={{ cursor: "pointer" }}>
                         <td className="num ref">{c.ref}</td>
@@ -526,7 +528,7 @@ function CampaignDetail({
             <div className="eyebrow">Profit</div>
             <div
               className="num total-value"
-              style={{ color: margin < MARGIN_FLOOR ? "var(--crit)" : "var(--ok)" }}
+              style={{ color: belowFloor(c) ? "var(--crit)" : "var(--ok)" }}
             >
               {gbp(dealProfit(c))} <small style={{ fontSize: 11, color: "var(--faint)" }}>{margin.toFixed(1)}%</small>
             </div>
@@ -546,9 +548,10 @@ function CampaignDetail({
         </div>
       </div>
 
-      {margin < MARGIN_FLOOR && gross > 0 && (
+      {belowFloor(c) && (
         <div className="warn-box">
-          Margin {margin.toFixed(1)}% is below the {MARGIN_FLOOR}% floor — review the charges.
+          Margin {floorMargin(c).toFixed(1)}% is below the {MARGIN_FLOOR}% floor — review the charges.
+          {floorMargin(c).toFixed(1) !== margin.toFixed(1) && " (Production passed through at cost is left out.)"}
         </div>
       )}
 

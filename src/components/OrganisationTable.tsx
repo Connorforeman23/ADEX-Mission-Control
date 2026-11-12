@@ -5,7 +5,7 @@ import Link from "next/link";
 import FollowUp from "@/components/FollowUp";
 import Segmented from "@/components/Segmented";
 import OrganisationEditor, { blankOrganisation } from "@/components/OrganisationEditor";
-import { channelLabel, gbp, MARGIN_FLOOR } from "@/lib/money";
+import { channelLabel, gbp } from "@/lib/money";
 import { CUSTOMER_STATUS_LABEL, type OrganisationRow } from "@/lib/organisations";
 
 // Every company in one list. A company can be a customer and a supplier at the
@@ -137,7 +137,7 @@ export default function OrganisationTable({
       ) : view === "cards" ? (
         <div className="client-grid">
           {filtered.map((r) => {
-            const low = r.billings > 0 && r.margin < MARGIN_FLOOR;
+            const low = r.below_floor;
             return (
               <article className="card" style={{ padding: "15px 16px" }} key={r.id}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -246,7 +246,7 @@ export default function OrganisationTable({
                         className="r num"
                         style={{
                           color:
-                            r.billings > 0 && r.margin < MARGIN_FLOOR ? "var(--crit)" : undefined,
+                            r.below_floor ? "var(--crit)" : undefined,
                         }}
                       >
                         {r.billings ? `${r.margin.toFixed(1)}%` : "—"}
