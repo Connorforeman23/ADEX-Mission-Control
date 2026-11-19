@@ -18,6 +18,8 @@ export type OrganisationRow = {
   /** Billings less what the suppliers are paid — carried over from the old Clients page. */
   profit: number;
   margin: number;
+  /** Under the margin floor, leaving out production passed through at cost. */
+  below_floor: boolean;
   supplier_spend: number;
   /** Channels booked for this client, shown as pills on the card view. */
   channels: string[];

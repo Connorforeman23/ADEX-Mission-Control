@@ -81,6 +81,43 @@ export const dealMargin = (c: Campaign) => {
   return gross ? (dealProfit(c) / gross) * 100 : 0;
 };
 
+/**
+ * A production line passed straight through at cost — the printing on an
+ * outdoor campaign, charged to the client at exactly what the supplier is
+ * paid. It earns nothing by design, so it must not drag a campaign below the
+ * margin floor: Randox's 2027 plan is 15% on every media line, but a £4,926
+ * print run at cost made the month read 14.1% and raised a warning.
+ * A production line charged BELOW cost is a loss, not a pass-through, and
+ * still counts.
+ */
+export const isPassThrough = (l: Pick<CampaignLine, "line_type" | "client_charge" | "supplier_net">) =>
+  l.line_type === "production" && Math.abs(Number(l.client_charge) - Number(l.supplier_net)) < 1;
+
+/**
+ * The margin the 15% floor is judged on: everything except pass-through
+ * production. The margin shown on screen stays the true blended figure; only
+ * the warning uses this.
+ */
+export const floorTotals = (c: Campaign) => {
+  const lines = c.campaign_lines.filter((l) => !isPassThrough(l));
+  return {
+    charge: sum(lines.map((l) => Number(l.client_charge))) + Number(c.fee),
+    net: sum(lines.map((l) => Number(l.supplier_net))),
+  };
+};
+
+export const floorMargin = (c: Campaign) => {
+  const { charge, net } = floorTotals(c);
+  return charge ? ((charge - net) / charge) * 100 : 0;
+};
+
+/**
+ * True when a campaign should be flagged as under the margin floor. A campaign
+ * of nothing but pass-through production has nothing to judge, so never is.
+ */
+export const belowFloor = (c: Campaign) =>
+  floorTotals(c).charge > 0 && floorMargin(c) < MARGIN_FLOOR;
+
 /** Media spend only — production (printing, audio) isn't media buying. */
 export const mediaSpend = (c: Campaign) =>
   sum(

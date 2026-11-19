@@ -11,7 +11,7 @@ import {
   gbp,
   gbpK,
   markupOf,
-  MARGIN_FLOOR,
+  belowFloor,
   STATUS_LABEL,
   supplierNet,
   vatOn,
@@ -178,7 +178,7 @@ export default async function FinancePage() {
                   <tbody>
                     {campaigns.map((c) => {
                       const margin = dealMargin(c);
-                      const low = clientGross(c) > 0 && margin < MARGIN_FLOOR;
+                      const low = belowFloor(c);
                       return (
                         <tr key={c.id}>
                           <td className="num ref">{c.ref}</td>

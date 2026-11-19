@@ -8,6 +8,7 @@ import {
   gbp,
   gbpK,
   MARGIN_FLOOR,
+  belowFloor,
   rangeGB,
   repCommission,
   REP_COMMISSION_PCT,
@@ -60,7 +61,7 @@ export default function MyWeek({
   const yearCampaigns = campaigns.filter((c) => (c.start_date ?? "").startsWith(thisYear));
   const yearCommission = yearCampaigns.reduce((a, c) => a + repCommission(c), 0);
 
-  const lowMargin = openBook.filter((c) => clientGross(c) > 0 && dealMargin(c) < MARGIN_FLOOR);
+  const lowMargin = openBook.filter(belowFloor);
   const stalled = leads.filter((l) => !l.next_action);
   const pipelineValue = leads.reduce((a, l) => a + Number(l.value), 0);
 
@@ -254,7 +255,7 @@ export default function MyWeek({
                 </thead>
                 <tbody>
                   {openBook.map((c) => {
-                    const low = clientGross(c) > 0 && dealMargin(c) < MARGIN_FLOOR;
+                    const low = belowFloor(c);
                     return (
                       <tr key={c.id}>
                         <td className="num ref">

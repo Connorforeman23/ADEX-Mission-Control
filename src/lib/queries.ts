@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { VAT_RATE, type Campaign } from "@/lib/money";
+import { isPassThrough, MARGIN_FLOOR, VAT_RATE, type Campaign } from "@/lib/money";
 import { spaceOrderRows, termsLabel, type SpaceOrder } from "@/lib/po";
 import {
   campaignMonths,
@@ -278,7 +278,7 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     supabase.from("contacts").select("organisation_id"),
     supabase
       .from("campaigns")
-      .select("id, fee, client_org_id, campaign_lines ( client_charge, supplier_net, channel )"),
+      .select("id, fee, client_org_id, campaign_lines ( client_charge, supplier_net, channel, line_type )"),
     supabase.from("campaign_lines").select("supplier_org_id, supplier_net"),
   ]);
 
@@ -306,11 +306,21 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
   const campaignCount = new Map<string, number>();
   const billings = new Map<string, number>();
   const cost = new Map<string, number>();
+  // The same figures less production passed through at cost — what the margin
+  // floor is judged on (see isPassThrough).
+  const floorBillings = new Map<string, number>();
+  const floorCost = new Map<string, number>();
   type CampRaw = {
     client_org_id: string | null;
     fee: number;
-    campaign_lines: { client_charge: number; supplier_net: number; channel: string }[];
+    campaign_lines: {
+      client_charge: number;
+      supplier_net: number;
+      channel: string;
+      line_type: "media" | "production" | null;
+    }[];
   };
+  const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
   for (const c of (campaignsRes.data ?? []) as unknown as CampRaw[]) {
     if (!c.client_org_id) continue;
     campaignCount.set(c.client_org_id, (campaignCount.get(c.client_org_id) ?? 0) + 1);
@@ -319,6 +329,9 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
     const net = lines.reduce((a, l) => a + Number(l.supplier_net), 0);
     billings.set(c.client_org_id, (billings.get(c.client_org_id) ?? 0) + value);
     cost.set(c.client_org_id, (cost.get(c.client_org_id) ?? 0) + net);
+    const judged = lines.filter((l) => !isPassThrough({ ...l, line_type: l.line_type ?? undefined }));
+    add(floorBillings, c.client_org_id, judged.reduce((a, l) => a + Number(l.client_charge), 0) + Number(c.fee));
+    add(floorCost, c.client_org_id, judged.reduce((a, l) => a + Number(l.supplier_net), 0));
     const set = channels.get(c.client_org_id) ?? new Set<string>();
     lines.forEach((l) => l.channel && set.add(l.channel));
     channels.set(c.client_org_id, set);
@@ -333,6 +346,8 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
   return ((orgsRes.data ?? []) as unknown as OrgRaw[]).map((o) => {
     const gross = billings.get(o.id) ?? 0;
     const profit = gross - (cost.get(o.id) ?? 0);
+    const floorGross = floorBillings.get(o.id) ?? 0;
+    const floorMargin = floorGross ? ((floorGross - (floorCost.get(o.id) ?? 0)) / floorGross) * 100 : 0;
     return {
       id: o.id,
       name: o.name,
@@ -346,6 +361,7 @@ export async function getOrganisations(): Promise<OrganisationRow[]> {
       billings: gross,
       profit,
       margin: gross ? (profit / gross) * 100 : 0,
+      below_floor: floorGross > 0 && floorMargin < MARGIN_FLOOR,
       supplier_spend: spend.get(o.id) ?? 0,
       channels: [...(channels.get(o.id) ?? [])],
     };

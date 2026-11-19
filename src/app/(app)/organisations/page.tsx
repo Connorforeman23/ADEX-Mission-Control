@@ -20,7 +20,7 @@ export default async function OrganisationsPage({
   const suppliers = live.filter((r) => r.is_supplier).length;
   const both = live.filter((r) => r.is_supplier && r.customer_status === "active_client").length;
   const billings = live.reduce((a, r) => a + r.billings, 0);
-  const belowFloor = live.filter((r) => r.billings > 0 && r.margin < MARGIN_FLOOR).length;
+  const belowFloor = live.filter((r) => r.below_floor).length;
 
   return (
     <div className="page">

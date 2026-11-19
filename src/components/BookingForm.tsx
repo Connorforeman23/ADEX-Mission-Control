@@ -11,7 +11,7 @@ import {
   REGIONS,
   SUPPLIERS_BY_CHANNEL,
 } from "@/lib/reference";
-import { CHANNELS, CHANNEL_COLOUR, channelLabel, gbp, rangeGB, VAT_RATE } from "@/lib/money";
+import { CHANNELS, CHANNEL_COLOUR, channelLabel, gbp, isPassThrough, MARGIN_FLOOR, rangeGB, VAT_RATE } from "@/lib/money";
 
 const blankLine = (): LineInput => ({
   line_type: "media",
@@ -93,6 +93,16 @@ export default function BookingForm({
     const charge = lines.reduce((a, l) => a + (num(l.client_charge) || num(l.supplier_gross)), 0) + num(fee);
     const gross = lines.reduce((a, l) => a + num(l.supplier_gross), 0);
     const net = lines.reduce((a, l) => a + netOf(l), 0);
+    // The floor warning leaves out production passed through at cost.
+    const judged = lines
+      .map((l) => ({
+        line_type: l.line_type,
+        client_charge: num(l.client_charge) || num(l.supplier_gross),
+        supplier_net: netOf(l),
+      }))
+      .filter((l) => !isPassThrough(l));
+    const floorCharge = judged.reduce((a, l) => a + l.client_charge, 0) + num(fee);
+    const floorNet = judged.reduce((a, l) => a + l.supplier_net, 0);
     return {
       charge,
       gross,
@@ -102,6 +112,8 @@ export default function BookingForm({
       markup: charge - num(fee) - gross,
       vat: Math.round(charge * VAT_RATE),
       margin: charge ? ((charge - net) / charge) * 100 : 0,
+      floorCharge,
+      floorMargin: floorCharge ? ((floorCharge - floorNet) / floorCharge) * 100 : 0,
     };
   }, [lines, fee]);
 
@@ -491,9 +503,10 @@ export default function BookingForm({
               You&rsquo;re charging below supplier gross — check the line values.
             </p>
           )}
-          {totals.charge > 0 && totals.margin < 15 && (
+          {totals.floorCharge > 0 && totals.floorMargin < MARGIN_FLOOR && (
             <p style={{ color: "var(--warn)", fontSize: 12.5, margin: "10px 0 0" }}>
-              Margin is below the 15% floor.
+              Margin {totals.floorMargin.toFixed(1)}% is below the {MARGIN_FLOOR}% floor
+              {totals.floorMargin.toFixed(1) !== totals.margin.toFixed(1) && " (production passed through at cost is left out)"}.
             </p>
           )}
         </div>
