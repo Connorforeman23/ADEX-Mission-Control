@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { gbpK } from "@/lib/money";
 
 export type BarRow = {
@@ -39,16 +40,28 @@ export default function BarList({ rows, empty }: { rows: BarRow[]; empty: string
         ))}
       </div>
 
+      {/* One grid for every row, so the label column is as wide as the longest
+          name and every bar starts at the same point — a flex row per bar let
+          a long name push its bar further right than its neighbours. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(104px, max-content) minmax(0, 1fr) 64px 38px",
+          alignItems: "center",
+          columnGap: 10,
+          rowGap: 12,
+        }}
+      >
       {rows.map((r) => (
-        <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Fragment key={r.label}>
           <span
             style={{
-              minWidth: 104,
               fontSize: 12.5,
               color: "var(--mid)",
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
+              whiteSpace: "nowrap",
             }}
           >
             <i
@@ -65,7 +78,6 @@ export default function BarList({ rows, empty }: { rows: BarRow[]; empty: string
           </span>
           <div
             style={{
-              flex: 1,
               height: 8,
               borderRadius: 99,
               background: "var(--surface-3)",
@@ -82,14 +94,15 @@ export default function BarList({ rows, empty }: { rows: BarRow[]; empty: string
               }}
             />
           </div>
-          <span className="num" style={{ width: 64, textAlign: "right", fontSize: 12.5, fontWeight: 650 }}>
+          <span className="num" style={{ textAlign: "right", fontSize: 12.5, fontWeight: 650 }}>
             {gbpK(r.value)}
           </span>
-          <span className="num" style={{ width: 38, textAlign: "right", fontSize: 11.5, color: "var(--faint)" }}>
+          <span className="num" style={{ textAlign: "right", fontSize: 11.5, color: "var(--faint)" }}>
             {total ? Math.round((r.value / total) * 100) : 0}%
           </span>
-        </div>
+        </Fragment>
       ))}
+      </div>
     </div>
   );
 }
